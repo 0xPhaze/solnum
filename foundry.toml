@@ -1,0 +1,14 @@
+[profile.default]
+solc = "0.8.17"
+# optimizer = false
+# optimizer_runs = 0
+optimizer = true
+optimizer_runs = 100_000
+# bytecode_hash = "none"
+
+fs_permissions = [{ access = "read-write", path = "./" }]
+rpc_endpoints = { mainnet = "https://rpc.ankr.com/eth", optimism = "https://rpc.ankr.com/optimism", fantom = "https://rpc.ankr.com/fantom", arbitrum = "https://rpc.ankr.com/arbitrum", bsc = "https://rpc.ankr.com/bsc", moonriver = "https://moonriver.public.blastapi.io", gnosis = "https://rpc.ankr.com/gnosis", avax = "https://rpc.ankr.com/avalanche", polygon = "https://rpc.ankr.com/polygon" }
+
+
+[fuzz]
+# runs = 300_000
