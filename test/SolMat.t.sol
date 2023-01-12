@@ -1,314 +1,300 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
-
-// import "solmate/test/utils/mocks/MockERC721.sol";
-// import "solmate/test/utils/mocks/MockERC20.sol";
-
-// import "futils/futils.sol";
 import "src/SolMat.sol";
+import "forge-std/Test.sol";
+import "./TestMatHelper.sol";
 
-function mat3Mult(uint8[3][3] memory mat1, uint8[3][3] memory mat2) returns (uint256[3][3] memory) {
-    // multiplies 3x3 matrix with 3x3 matrix
-    uint256 r1 = mat1.length; // rows of mat1
-    uint256 c1 = mat1[0].length; // columns of mat1
-    uint256 c2 = mat2[0].length; // columns of mat2
-
-    uint256[3][3] memory result;
-
-    for (uint256 i = 0; i < r1; ++i) {
-        for (uint256 j = 0; j < c2; ++j) {
-            for (uint256 k = 0; k < c1; ++k) {
-                result[i][j] += mat1[i][k] * mat2[k][j];
-            }
-        }
-    }
-
-    return (result);
-}
-
-contract TestMatMul is Test {
-    // using futils for *;
+contract TestSolMat is TestMatHelper {
     using SolMat for Mat;
 
-    function setUp() public {}
+    uint8[3][4] MAT43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
 
-    function assertIsEye(Mat mat) internal {
-        (uint256 n, uint256 m) = mat.shape();
+    /* ------------- header ------------- */
 
-        for (uint256 i; i < n; ++i) {
-            for (uint256 j; j < m; ++j) {
-                assertEq(mat.at(i, j), (i == j) ? 1 : 0);
-            }
-        }
+    function test_header(uint64 data, uint24 n, uint24 m, uint8 scale) public {
+        scale = scale % 6;
+
+        uint256 size = 32 >> scale;
+
+        Mat A = SolMat.newHeader(data, n, m, scale);
+
+        (uint256 hn, uint256 hm, uint256 hdata, uint256 hsz) = A.header();
+
+        assertEq(hn, n);
+        assertEq(hm, m);
+        assertEq(hsz, size);
+        assertEq(hdata, data);
+
+        (hn, hm) = A.shape();
+
+        assertEq(hn, n);
+        assertEq(hm, m);
+
+        (hn, hm) = (A.dim0(), A.diA());
+
+        assertEq(hn, n);
+        assertEq(hm, m);
+
+        uint256 len = A.length();
+        uint256 ref = A.ref();
+        uint256 sizeBytes = A.sizeBytes();
+
+        assertEq(len, uint256(n) * uint256(m));
+        assertEq(ref, data);
+        assertEq(sizeBytes, uint256(n) * uint256(m) * size);
+    }
+
+    /* ------------- alloc ------------- */
+
+    function test_alloc(uint8 sz) public {
+        uint256 size = (uint256(sz) + 31) / 32 * 32;
+        uint256 memPtr = freeMemPtr();
+
+        uint256 ptr = SolMat._alloc(sz);
+
+        assertEq(freeMemPtr() - memPtr, size);
+        assertEq(ptr, memPtr);
+    }
+
+    function test_alloc(uint8 n, uint8 m) public {
+        uint256 size = uint256(n) * uint256(m) * 32;
+        uint256 memPtr = freeMemPtr();
+
+        uint256 ptr = SolMat._alloc(n, m);
+
+        assertEq(freeMemPtr() - memPtr, size);
+        assertEq(ptr, memPtr);
+    }
+
+    function test_alloc(uint8 n, uint8 m, uint8 scale) public {
+        uint256 size = (uint256(n) * uint256(m) * uint256(32 >> scale) + 31) / 32 * 32;
+        uint256 memPtr = freeMemPtr();
+
+        uint256 ptr = SolMat._alloc(n, m, scale);
+
+        assertEq(freeMemPtr() - memPtr, size);
+        assertEq(ptr, memPtr);
     }
 
     /* ------------- constructors ------------- */
 
-    function freeMemPtr() internal returns (uint256 memPtr) {
-        assembly {
-            memPtr := mload(0x40)
-        }
-    }
+    function test_zeros(uint8 n, uint8 m) public {
+        Mat A = SolMat.zeros(n, m);
 
-    function logMatHeader(Mat mat) internal {
-        bytes32 data;
-        assembly {
-            data := mload(mat)
-        }
-        console.logBytes32(data);
-    }
+        assertEq(A, 0);
 
-    function test_alloc() public {
-        uint256 memPtr = freeMemPtr();
-        uint256 ptr = SolMat._alloc(3, 3, 32);
-
-        assertEq(freeMemPtr() - memPtr, (3 * 3) * 32);
-        assertEq(ptr, memPtr);
-
-        memPtr = freeMemPtr();
-        ptr = SolMat._alloc(1, 7, 32);
-
-        assertEq(freeMemPtr() - memPtr, (1 * 7) * 32);
-        assertEq(ptr, memPtr);
-    }
-
-    function test_zeros() public {
-        Mat m1 = SolMat.zeros(3, 3);
-        assertTrue(m1.eq(0));
-
-        Mat m2 = SolMat.zeros(1, 7);
-        assertTrue(m2.eq(0));
-
-        m2.set(0, 4, 7);
-        assertFalse(m2.eq(0));
-    }
-
-    function test_header() public {
-        Mat mat = SolMat.zeros(3, 4);
-        (uint256 n, uint256 m, uint256 data, uint256 sz) = mat.header();
-
-        assertEq(n, 3);
-        assertEq(m, 4);
-        assertTrue(data != 0);
-        assertEq(sz, 32);
-    }
-
-    function test_shape() public {
-        Mat mat = SolMat.zeros(0, 0);
-
-        (uint256 n, uint256 m) = mat.shape();
-
-        assertEq(n, 0);
-        assertEq(m, 0);
-
-        mat = SolMat.zeros(3, 3);
-
-        (n, m) = mat.shape();
-
-        assertEq(n, 3);
-        assertEq(m, 3);
-
-        mat = SolMat.zeros(7, 25);
-
-        (n, m) = mat.shape();
-
-        assertEq(n, 7);
-        assertEq(m, 25);
-    }
-
-    function test_at_set() public {
-        Mat mat = SolMat.zeros(3, 4);
-
-        mat.set(0, 3, 3);
-        mat.set(1, 2, 12);
-        mat.set(2, 0, 20);
-
-        assertEq(mat.at(0, 3), 3);
-        assertEq(mat.at(1, 2), 12);
-        assertEq(mat.at(2, 0), 20);
-
-        mat.set(2, 0, 7777);
-
-        assertEq(mat.at(2, 0), 7777);
-    }
-
-    function test_at_set(uint256 n, uint256 m, uint256 i, uint256 j, uint256 v) public {
-        n = bound(n, 1, 10);
-        m = bound(m, 1, 10);
-        i = bound(i, 0, n - 1);
-        j = bound(j, 0, m - 1);
-
-        Mat mat = SolMat.zeros(n, m);
-
-        mat.set(i, j, v);
-
-        assertEq(mat.at(i, j), v);
+        // if (n * m != 0) {
+        //     A.set(111 % n, 333 % m, 1);
+        //     assertFalse(A.eq(0));
+        // }
     }
 
     function test_eye() public {
-        Mat m1 = SolMat.eye(3, 3);
+        Mat A = SolMat.eye(3, 3);
 
-        assertIsEye(m1);
+        assertIsEye(A);
     }
 
     function test_ones() public {
-        Mat m1 = SolMat.ones(3, 4);
+        Mat A = SolMat.ones(3, 4);
 
-        assertTrue(m1.eq(1));
+        assertTrue(A.eq(1));
     }
 
-    function test_fromBytes() public {
-        uint8[3][3] memory m1 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+    /* ------------- set ------------- */
 
-        Mat m2 = SolMat.fromBytes_(abi.encode(m1), 3, 3);
+    function test_set(uint256 n, uint256 m, uint8[3] calldata i, uint8[3] calldata j, uint8[3] calldata v) public {
+        n = bound(n, 1, 10);
+        m = bound(m, 1, 10);
 
-        for (uint256 i; i < 3; ++i) {
-            for (uint256 j; j < 3; ++j) {
-                assertEq(m2.at(i, j), m1[i][j]);
-            }
-        }
+        Mat A = SolMat.zeros(n, m);
 
-        Mat m3 = m2.copy();
+        A.set(i[0] % n, j[0] % m, v[0]);
+        assertEq(A.at(i[0] % n, j[0] % m), v[0]);
 
-        assertTrue(m3.eq(m2));
+        A.set(i[1] % n, j[1] % m, v[1]);
+        assertEq(A.at(i[1] % n, j[1] % m), v[1]);
+
+        A.set(i[2] % n, j[2] % m, v[2]);
+        assertEq(A.at(i[2] % n, j[2] % m), v[2]);
     }
 
-    function test_asMat() public {
-        uint8[3][3] memory m1 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+    function test_range() public {
+        Mat A = SolMat.range(1, 13);
 
-        Mat m2 = SolMat.asMat_(m1);
-
-        for (uint256 i; i < 3; ++i) {
-            for (uint256 j; j < 3; ++j) {
-                assertEq(m2.at(i, j), m1[i][j]);
-            }
+        for (uint256 i; i < 12; i++) {
+            assertEq(A.at(i), 1 + i);
         }
-
-        (uint256 n, uint256 m, uint256 data, uint256 sz) = m2.header();
-
-        // uint256 loc;
-        // assembly {
-        //     loc := m1
-        // }
-        // mdump(loc, 10);
-
-        assertEq(n, 3);
-        assertEq(m, 3);
-        assertTrue(data != 0);
-        assertEq(sz, 32);
-
-        // logMat(m2);
-        // Mat m3 = m2.copy();
-
-        // assertTrue(m3.eq(m2));
     }
 
-    function mdump(uint256 location, uint256 numSlots) internal view {
-        bytes32 m;
-        for (uint256 i; i < numSlots; i++) {
-            assembly {
-                m := mload(add(location, mul(0x20, i)))
-            }
-            console.logBytes2(bytes2(uint16(location + 0x20 * i)));
-            console.logBytes32(m);
+    function test_reshape() public {
+        Mat A = SolMat.range(1, 13);
+        Mat B = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+
+        assertEq(A.reshape(4, 3), B);
+        assertNEq(A.reshape(3, 4), B);
+
+        // todo: test negative cases
+    }
+
+    // function test_xxx() public view {
+    //     for (uint256 i; i < 6; i++) {
+    //         console.log("%s: %s (%s)", i, 32 >> i, (32 - (32 >> i)) * 8);
+    //     }
+    // }
+
+    function test_scale() public {
+        Mat A = SolMat.range(0, 10);
+        Mat B = SolMat.newHeader(A.ref(), 1, 10, 1);
+
+        for (uint256 i; i < 10; i++) {
+            assertEq(B.at(i), i % 2 == 0 ? (1 + i) / 2 : 0);
         }
-        console.log();
     }
 
     /* ------------- conversions ------------- */
 
-    /* ------------- functions ------------- */
+    function test_from() public {
+        Mat A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
-    function test_eq() public {
-        Mat m1 = SolMat.fromBytes_(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 3, 3);
-        Mat m2 = m1.copy();
+        (uint256 n, uint256 m) = (4, 3);
 
-        assertTrue(m1.eq(m2));
+        for (uint256 i; i < n; ++i) {
+            for (uint256 j; j < m; ++j) {
+                assertEq(A.at(i, j), MAT43[i][j]);
+            }
+        }
 
-        m1.set(0, 0, 9);
-        assertFalse(m1.eq(m2));
+        (uint256 hn, uint256 hm, uint256 hdata, uint256 hsz) = A.header();
 
-        m2.set(0, 0, 9);
-        assertTrue(m1.eq(m2));
+        assertEq(hn, n);
+        assertEq(hm, m);
+        assertEq(hsz, 32);
+        assertTrue(hdata != 0);
+    }
+
+    function test_from_bytes() public {
+        Mat A = SolMat.from(MAT43);
+        Mat B = SolMat.from_(abi.encode(MAT43), 4, 3);
+
+        (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = A.header();
+        (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = B.header();
+
+        assertEq(An, Bn);
+        assertEq(Am, Bm);
+        assertEq(Asz, Bsz);
+
+        assertEq(A, B);
+
+        assertTrue(Adata != 0);
+        assertTrue(Bdata != 0);
+        assertTrue(Adata != Bdata);
+    }
+
+    function test_toBytes() public {
+        Mat A = SolMat.from(MAT43);
+        Mat B = SolMat.from_(A.toBytes(), 4, 3);
+
+        assertEq(A, B);
+        assertTrue(A.ref() != B.ref());
     }
 
     function test_copy() public {
-        uint8[3][3] memory m1 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+        Mat A = SolMat.from(MAT43);
+        Mat B = A.copy();
 
-        Mat m2 = SolMat.fromBytes_(abi.encode(m1), 3, 3);
-
-        for (uint256 i; i < 3; ++i) {
-            for (uint256 j; j < 3; ++j) {
-                assertEq(m2.at(i, j), i * 3 + j + 1);
-            }
-        }
-
-        Mat m3 = m2.copy();
-
-        assertTrue(m3.eq(m2));
+        assertEq(A, B);
+        assertTrue(A.ref() != B.ref());
     }
 
-    // function test_mul() public {
-    //     // Mat m1 = SolMat.fromBytes_(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 3, 3);
-    //     Mat m1 = SolMat.asMat_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     Mat m2 = SolMat.fromBytes_(abi.encode([[1, 1, 1], [2, 2, 2], [3, 3, 3]]), 3, 3);
-    //     Mat m3 = SolMat.fromBytes_(abi.encode([[14, 14, 14], [32, 32, 32], [50, 50, 50]]), 3, 3);
+    /* ------------- functions ------------- */
 
-    //     assertTrue(m1.mul(m2).eq(m3));
-    //     assertFalse(m2.mul(m1).eq(m3));
+    function test_eq() public {
+        Mat A = SolMat.from_(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 3, 3);
+        Mat B = A.copy();
+
+        assertEq(A, B);
+
+        A.set(0, 0, 9);
+        assertFalse(A.eq(B));
+
+        B.set(0, 0, 9);
+        assertEq(A, B);
+    }
+
+    function test_dot() public {
+        Mat A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        Mat B = SolMat.from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+        Mat C = SolMat.from([[14, 14, 14], [32, 32, 32], [50, 50, 50]]);
+
+        assertEq(A.dot(B), C);
+        assertNEq(B.dot(A), C);
+    }
+
+    function test_mul() public {
+        Mat A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        Mat B = SolMat.from([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
+
+        assertEq(A.mul(2), B);
+    }
+
+    function test_add() public {
+        Mat A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        Mat B = SolMat.from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+        Mat C = SolMat.from([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
+
+        assertEq(A.add(B), C);
+        assertEq(A.add(SolMat.zeros(3, 3)), A);
+    }
+
+    function test_add_scalar() public {
+        Mat A = SolMat.range(1, 10);
+
+        assertEq(A.add(1), SolMat.range(2, 11));
+        assertEq(A.add(10), SolMat.range(11, 20));
+    }
+
+    /* ------------- performance ------------- */
+
+    // function test__perf_dot_128() public pure {
+    //     Mat A = SolMat.eye(128, 128);
+    //     Mat B = SolMat.eye(128, 128);
+
+    //     A.dot(B);
     // }
 
-    /* ------------- logMat ------------- */
+    // function test__perf_dot_128_x2() public {
+    //     Mat A = SolMat.eye(128, 128, 1);
+    //     Mat B = SolMat.eye(128, 128, 1);
 
-    function logMat(Mat mat) public {
-        (uint256 n, uint256 m) = mat.shape();
+    //     // A.dot(B);
 
-        string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
-
-        for (uint256 i; i < n; ++i) {
-            for (uint256 j; j < m; ++j) {
-                str = string.concat(str, string.concat(vm.toString(mat.at(i, j)), "\t"));
-            }
-            str = string.concat(str, "\n");
-        }
-
-        emit log(str);
-    }
-
-    function logMat(uint256[3][3] memory mat) public {
-        (uint256 n, uint256 m) = (mat.length, mat[0].length);
-
-        string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
-
-        for (uint256 i; i < n; ++i) {
-            for (uint256 j; j < m; ++j) {
-                str = string.concat(str, string.concat(vm.toString(mat[i][j]), "\t"));
-            }
-            str = string.concat(str, "\n");
-        }
-
-        emit log(str);
-    }
-
-    // function logMem(Mat mat) public {
-    //     // (uint256 n, uint256 m) = mat.shape();
-    //     (uint256 n, uint256 m, uint256 data, uint256 size) = mat.header();
-
-    //     string memory str = string.concat("\nMem(", vm.toString(n), ",", vm.toString(m), "):\n");
-
-    //     for (uint256 i; i < n; ++i) {
-    //         for (uint256 j; j < m; ++j) {
-    //             uint256 el;
-    //             assembly {
-    //                 el := mload(add(data, mul(add(mul(i, m), j), size)))
-    //             }
-    //             str = string.concat(str, string.concat(vm.toString(el), "\t"));
-    //         }
-    //         str = string.concat(str, "\n");
-    //     }
-
-    //     emit log(str);
+    //     assertEq(A.dot(B), A);
     // }
+
+    function test_half_prec() public {
+        Mat A = SolMat.eye(5, 5, 1);
+        Mat B = SolMat.eye(5, 5, 1);
+
+        assertEq(A.dot(B), A);
+    }
+
+    function test_range_half() public {
+        Mat A = SolMat.range(1, 13);
+
+        for (uint256 i; i < 12; i++) {
+            assertEq(A.at(i), 1 + i);
+        }
+    }
+
+    function test_reshape_half() public {
+        Mat A = SolMat.range(1, 13);
+        Mat B = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+
+        assertEq(A.reshape(4, 3), B);
+        assertNEq(A.reshape(3, 4), B);
+
+        // todo: test negative cases
+    }
 }
