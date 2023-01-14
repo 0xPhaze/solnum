@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "src/SolMat64.sol";
-import "forge-std/Test.sol";
-import "./TestMatHelper.sol";
+import "src/SM32x32.sol";
+import "./TestHelper.sol";
 
-using SolMat64 for Mat64;
+using SM32x32Lib for SM32x32;
 
-// contract TestSolMat is TestMatHelper {
+// contract TestSolMat is TestHelper {
 //     uint8[3][4] MAT43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
 
 //     /* ------------- header ------------- */
@@ -17,7 +16,7 @@ using SolMat64 for Mat64;
 
 //     //     uint256 size = 32 >> scale;
 
-//     //     Mat64 A = SolMat.newHeader(data, n, m, scale);
+//     //     SM32x32 A = SolMat.USM256Header(data, n, m, scale);
 
 //     //     (uint256 hn, uint256 hm, uint256 hdata, uint256 hsz) = A.header();
 
@@ -80,7 +79,7 @@ using SolMat64 for Mat64;
 //     // /* ------------- constructors ------------- */
 
 //     // function test_zeros(uint8 n, uint8 m) public {
-//     //     Mat64 A = SolMat.zeros(n, m);
+//     //     SM32x32 A = SolMat.zeros(n, m);
 
 //     //     assertEq(A, 0);
 
@@ -91,13 +90,13 @@ using SolMat64 for Mat64;
 //     // }
 
 //     // function test_eye() public {
-//     //     Mat64 A = SolMat.eye(3, 3);
+//     //     SM32x32 A = SolMat.eye(3, 3);
 
 //     //     assertIsEye(A);
 //     // }
 
 //     // function test_ones() public {
-//     //     Mat64 A = SolMat.ones(3, 4);
+//     //     SM32x32 A = SolMat.ones(3, 4);
 
 //     //     assertTrue(A.eq(1));
 //     // }
@@ -108,7 +107,7 @@ using SolMat64 for Mat64;
 //     //     n = bound(n, 1, 10);
 //     //     m = bound(m, 1, 10);
 
-//     //     Mat64 A = SolMat.zeros(n, m);
+//     //     SM32x32 A = SolMat.zeros(n, m);
 
 //     //     A.set(i[0] % n, j[0] % m, v[0]);
 //     //     assertEq(A.at(i[0] % n, j[0] % m), v[0]);
@@ -121,7 +120,7 @@ using SolMat64 for Mat64;
 //     // }
 
 //     function test_range() public {
-//         Mat64 A = SolMat64.range(1, 13);
+//         SM32x32 A = SM32x32Lib.range(1, 13);
 
 //         // uint256 loc = A.ref();
 
@@ -140,8 +139,8 @@ using SolMat64 for Mat64;
 //     }
 
 //     // function test_reshape() public {
-//     //     Mat64 A = SolMat.range(1, 13);
-//     //     Mat64 B = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+//     //     SM32x32 A = SolMat.range(1, 13);
+//     //     SM32x32 B = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
 //     //     assertEq(A.reshape(4, 3), B);
 //     //     assertNEq(A.reshape(3, 4), B);
@@ -156,8 +155,8 @@ using SolMat64 for Mat64;
 //     // // }
 
 //     // function test_scale() public {
-//     //     Mat64 A = SolMat.range(0, 10);
-//     //     Mat64 B = SolMat.newHeader(A.ref(), 1, 10, 1);
+//     //     SM32x32 A = SolMat.range(0, 10);
+//     //     SM32x32 B = SolMat.USM256Header(A.ref(), 1, 10, 1);
 
 //     //     for (uint256 i; i < 10; i++) {
 //     //         assertEq(B.at(i), i % 2 == 0 ? (1 + i) / 2 : 0);
@@ -167,7 +166,7 @@ using SolMat64 for Mat64;
 //     // /* ------------- conversions ------------- */
 
 //     // function test_from() public {
-//     //     Mat64 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+//     //     SM32x32 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
 //     //     (uint256 n, uint256 m) = (4, 3);
 
@@ -186,8 +185,8 @@ using SolMat64 for Mat64;
 //     // }
 
 //     // function test_from_bytes() public {
-//     //     Mat64 A = SolMat.from(MAT43);
-//     //     Mat64 B = SolMat.from_(abi.encode(MAT43), 4, 3);
+//     //     SM32x32 A = SolMat.from(MAT43);
+//     //     SM32x32 B = SolMat.from_(abi.encode(MAT43), 4, 3);
 
 //     //     (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = A.header();
 //     //     (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = B.header();
@@ -204,16 +203,16 @@ using SolMat64 for Mat64;
 //     // }
 
 //     // function test_toBytes() public {
-//     //     Mat64 A = SolMat.from(MAT43);
-//     //     Mat64 B = SolMat.from_(A.toBytes(), 4, 3);
+//     //     SM32x32 A = SolMat.from(MAT43);
+//     //     SM32x32 B = SolMat.from_(A.toBytes(), 4, 3);
 
 //     //     assertEq(A, B);
 //     //     assertTrue(A.ref() != B.ref());
 //     // }
 
 //     // function test_copy() public {
-//     //     Mat64 A = SolMat.from(MAT43);
-//     //     Mat64 B = A.copy();
+//     //     SM32x32 A = SolMat.from(MAT43);
+//     //     SM32x32 B = A.copy();
 
 //     //     assertEq(A, B);
 //     //     assertTrue(A.ref() != B.ref());
@@ -222,8 +221,8 @@ using SolMat64 for Mat64;
 //     // /* ------------- functions ------------- */
 
 //     // function test_eq() public {
-//     //     Mat64 A = SolMat.from_(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 3, 3);
-//     //     Mat64 B = A.copy();
+//     //     SM32x32 A = SolMat.from_(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 3, 3);
+//     //     SM32x32 B = A.copy();
 
 //     //     assertEq(A, B);
 
@@ -235,32 +234,32 @@ using SolMat64 for Mat64;
 //     // }
 
 //     // function test_dot() public {
-//     //     Mat64 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-//     //     Mat64 B = SolMat.from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-//     //     Mat64 C = SolMat.from([[14, 14, 14], [32, 32, 32], [50, 50, 50]]);
+//     //     SM32x32 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+//     //     SM32x32 B = SolMat.from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+//     //     SM32x32 C = SolMat.from([[14, 14, 14], [32, 32, 32], [50, 50, 50]]);
 
 //     //     assertEq(A.dot(B), C);
 //     //     assertNEq(B.dot(A), C);
 //     // }
 
 //     // function test_mul() public {
-//     //     Mat64 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-//     //     Mat64 B = SolMat.from([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
+//     //     SM32x32 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+//     //     SM32x32 B = SolMat.from([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
 
 //     //     assertEq(A.mul(2), B);
 //     // }
 
 //     // function test_add() public {
-//     //     Mat64 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-//     //     Mat64 B = SolMat.from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-//     //     Mat64 C = SolMat.from([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
+//     //     SM32x32 A = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+//     //     SM32x32 B = SolMat.from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+//     //     SM32x32 C = SolMat.from([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
 
 //     //     assertEq(A.add(B), C);
 //     //     assertEq(A.add(SolMat.zeros(3, 3)), A);
 //     // }
 
 //     // function test_add_scalar() public {
-//     //     Mat64 A = SolMat.range(1, 10);
+//     //     SM32x32 A = SolMat.range(1, 10);
 
 //     //     assertEq(A.add(1), SolMat.range(2, 11));
 //     //     assertEq(A.add(10), SolMat.range(11, 20));
@@ -269,15 +268,15 @@ using SolMat64 for Mat64;
 //     // /* ------------- performance ------------- */
 
 //     // // function test__perf_dot_128() public pure {
-//     // //     Mat64 A = SolMat.eye(128, 128);
-//     // //     Mat64 B = SolMat.eye(128, 128);
+//     // //     SM32x32 A = SolMat.eye(128, 128);
+//     // //     SM32x32 B = SolMat.eye(128, 128);
 
 //     // //     A.dot(B);
 //     // // }
 
 //     // // function test__perf_dot_128_x2() public {
-//     // //     Mat64 A = SolMat.eye(128, 128, 1);
-//     // //     Mat64 B = SolMat.eye(128, 128, 1);
+//     // //     SM32x32 A = SolMat.eye(128, 128, 1);
+//     // //     SM32x32 B = SolMat.eye(128, 128, 1);
 
 //     // //     // A.dot(B);
 
@@ -285,14 +284,14 @@ using SolMat64 for Mat64;
 //     // // }
 
 //     // function test_half_prec() public {
-//     //     Mat64 A = SolMat.eye(5, 5, 1);
-//     //     Mat64 B = SolMat.eye(5, 5, 1);
+//     //     SM32x32 A = SolMat.eye(5, 5, 1);
+//     //     SM32x32 B = SolMat.eye(5, 5, 1);
 
 //     //     assertEq(A.dot(B), A);
 //     // }
 
 //     // function test_range_half() public {
-//     //     Mat64 A = SolMat.range(1, 13);
+//     //     SM32x32 A = SolMat.range(1, 13);
 
 //     //     for (uint256 i; i < 12; i++) {
 //     //         assertEq(A.at(i), 1 + i);
@@ -300,8 +299,8 @@ using SolMat64 for Mat64;
 //     // }
 
 //     // function test_reshape_half() public {
-//     //     Mat64 A = SolMat.range(1, 13);
-//     //     Mat64 B = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+//     //     SM32x32 A = SolMat.range(1, 13);
+//     //     SM32x32 B = SolMat.from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
 //     //     assertEq(A.reshape(4, 3), B);
 //     //     assertNEq(A.reshape(3, 4), B);

@@ -3,13 +3,17 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 
-type Mat is uint256;
+type SM32x32 is uint256;
 
-library SolMat {
+using SM32x32Lib for SM32x32;
+
+library SM32x32Lib {
     uint256 constant META_DATA_BITS = 24;
     // uint256 constant META_DATA_MAX = 0xffffff; // 24 bits
     // uint256 constant META_DATA_MAX = 0xffffffffffffffff; // 24 bits
     uint256 constant DATA_CHUNK_SIZE = 0x20;
+
+    uint256 constant DATA_BYTES = 0x08;
 
     uint256 constant WORD = 0x20;
     uint256 constant MAX_04_BITS = 0xf;
@@ -22,10 +26,10 @@ library SolMat {
 
     /* ------------- header ------------- */
 
-    // struct newHeader {
+    // struct USM256Header {
     //     uint24 n;
     //     uint24 m;
-    //     uint8 scale; // 1 = 256; 2 = 128
+    // //     uint8 scale; // 1 = 256; 2 = 128
     //     uint64 data;
     //     uint24 startx;
     //     uint24 starty;
@@ -36,7 +40,7 @@ library SolMat {
     //     bool T;
     // }
 
-    function newHeader(uint256 data, uint256 n, uint256 m) internal pure returns (Mat A) {
+    function USM256Header(uint256 data, uint256 n, uint256 m) internal pure returns (SM32x32 A) {
         assembly {
             A :=
                 or(
@@ -48,14 +52,11 @@ library SolMat {
         require((n | m | (data >> 42)) <= MAX_24_BITS, "SolMat: too large");
     }
 
-    function newHeader(uint256 data, uint256 n, uint256 m, uint256 scale) internal pure returns (Mat A) {
+    function USM256Header(uint256 data, uint256 n, uint256 m, uint256 scale) internal pure returns (SM32x32 A) {
         assembly {
             A :=
                 or(
-                    or(
-                        shl(56, data), // data location
-                        shl(48, scale) // precision (data chunk scale)
-                    ),
+                    shl(56, data), // data location
                     or(shl(24, m), n) // shape
                 )
         }
@@ -63,35 +64,35 @@ library SolMat {
         require((n | m) <= MAX_24_BITS && scale < 6 && data <= MAX_64_BITS, "SolMat: too large");
     }
 
-    function header(Mat A) internal pure returns (uint256 n, uint256 m, uint256 data, uint256 size) {
+    function header(SM32x32 A) internal pure returns (uint256 n, uint256 m, uint256 data, uint256 size) {
         assembly {
             n := and(A, MAX_24_BITS)
             m := and(shr(24, A), MAX_24_BITS)
-            size := shr(and(shr(48, A), MAX_04_BITS), WORD)
+            size := shr(and(shr(48, A), MAX_04_BITS), WORD) // XXX
             data := and(shr(56, A), MAX_64_BITS)
         }
     }
 
-    function shape(Mat A) internal pure returns (uint256 n, uint256 m) {
+    function shape(SM32x32 A) internal pure returns (uint256 n, uint256 m) {
         assembly {
             n := and(A, MAX_24_BITS)
             m := and(shr(24, A), MAX_24_BITS)
         }
     }
 
-    function dim0(Mat A) internal pure returns (uint256 n) {
+    function dim0(SM32x32 A) internal pure returns (uint256 n) {
         assembly {
             n := and(A, MAX_24_BITS)
         }
     }
 
-    function diA(Mat A) internal pure returns (uint256 m) {
+    function dim1(SM32x32 A) internal pure returns (uint256 m) {
         assembly {
             m := and(shr(24, A), MAX_24_BITS)
         }
     }
 
-    function length(Mat A) internal pure returns (uint256 len) {
+    function length(SM32x32 A) internal pure returns (uint256 len) {
         assembly {
             let n := and(A, MAX_24_BITS)
             let m := and(shr(24, A), MAX_24_BITS)
@@ -99,7 +100,7 @@ library SolMat {
         }
     }
 
-    function sizeBytes(Mat A) internal pure returns (uint256 size) {
+    function sizeBytes(SM32x32 A) internal pure returns (uint256 size) {
         assembly {
             let n := and(A, MAX_24_BITS)
             let m := and(shr(24, A), MAX_24_BITS)
@@ -108,7 +109,7 @@ library SolMat {
         }
     }
 
-    function ref(Mat A) internal pure returns (uint256 data) {
+    function ref(SM32x32 A) internal pure returns (uint256 data) {
         assembly {
             data := and(shr(56, A), MAX_64_BITS)
         }
@@ -150,31 +151,31 @@ library SolMat {
 
     /* ------------- constructors ------------- */
 
-    function zeros(uint256 n, uint256 m, uint256 scale) internal pure returns (Mat A) {
+    function zeros(uint256 n, uint256 m, uint256 scale) internal pure returns (SM32x32 A) {
         // Allocate memory space for matrix.
         uint256 data = _alloc(n, m, scale);
 
         // Generate metadata header.
-        A = newHeader(data, n, m, scale);
+        A = USM256Header(data, n, m, scale);
     }
 
-    function zeros(uint256 n, uint256 m) internal pure returns (Mat A) {
+    function zeros(uint256 n, uint256 m) internal pure returns (SM32x32 A) {
         // Allocate memory space for matrix.
         uint256 data = _alloc(n, m);
 
         // Generate metadata header.
-        A = newHeader(data, n, m);
+        A = USM256Header(data, n, m);
     }
 
-    function zeros(uint256 m) internal pure returns (Mat A) {
+    function zeros(uint256 m) internal pure returns (SM32x32 A) {
         // Allocate memory space for matrix.
         uint256 data = _alloc(1, m);
 
         // Generate metadata header.
-        A = newHeader(data, 1, m);
+        A = USM256Header(data, 1, m);
     }
 
-    function ones(uint256 n, uint256 m) internal pure returns (Mat A) {
+    function ones(uint256 n, uint256 m) internal pure returns (SM32x32 A) {
         A = zeros(n, m);
 
         (,, uint256 data, uint256 sz) = header(A);
@@ -191,11 +192,11 @@ library SolMat {
         }
     }
 
-    function ones(uint256 m) internal pure returns (Mat A) {
+    function ones(uint256 m) internal pure returns (SM32x32 A) {
         return ones(1, m);
     }
 
-    function eye(uint256 n, uint256 m) internal pure returns (Mat A) {
+    function eye(uint256 n, uint256 m) internal pure returns (SM32x32 A) {
         A = zeros(n, m);
 
         uint256 size = WORD;
@@ -212,7 +213,7 @@ library SolMat {
         }
     }
 
-    function eye(uint256 n, uint256 m, uint256 scale) internal pure returns (Mat A) {
+    function eye(uint256 n, uint256 m, uint256 scale) internal pure returns (SM32x32 A) {
         A = zeros(n, m, scale);
 
         uint256 size = WORD >> scale;
@@ -229,7 +230,7 @@ library SolMat {
         }
     }
 
-    function range(uint256 start, uint256 end) internal pure returns (Mat A) {
+    function range(uint256 start, uint256 end) internal pure returns (SM32x32 A) {
         require(start <= end, "SolMat: start <= end");
 
         uint256 len;
@@ -240,15 +241,15 @@ library SolMat {
 
         A = zeros(1, len);
 
-        for (uint256 i; i < len; ++i) {
-            // XXX optimize
-            unchecked {
+        unchecked {
+            for (uint256 i; i < len; ++i) {
+                // XXX optimize
                 set(A, i, start + i);
             }
         }
     }
 
-    function range(uint256 end) internal pure returns (Mat A) {
+    function range(uint256 end) internal pure returns (SM32x32 A) {
         A = zeros(1, end);
 
         for (uint256 i; i < end; ++i) {
@@ -257,7 +258,7 @@ library SolMat {
         }
     }
 
-    function reshape(Mat A, uint256 nNew, uint256 mNew) internal pure returns (Mat out) {
+    function reshape(SM32x32 A, uint256 nNew, uint256 mNew) internal pure returns (SM32x32 out) {
         (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
 
         unchecked {
@@ -271,13 +272,13 @@ library SolMat {
         else if (sz == 2) scale = 4;
         else if (sz == 1) scale = 5;
 
-        out = newHeader(data, nNew, mNew, scale);
+        out = USM256Header(data, nNew, mNew, scale);
     }
 
     /* ------------- conversions ------------- */
 
     /// @dev `data` needs to be contiguous in memory.
-    function from(uint8[3][4] memory data) internal pure returns (Mat A) {
+    function from(uint8[3][4] memory data) internal pure returns (SM32x32 A) {
         uint256 ptr;
 
         assembly {
@@ -286,21 +287,21 @@ library SolMat {
             ptr := mload(data)
         }
 
-        A = newHeader(ptr, 4, 3);
+        A = USM256Header(ptr, 4, 3);
     }
 
-    function from(uint8[3][3] memory data) internal pure returns (Mat A) {
+    function from(uint8[3][3] memory data) internal pure returns (SM32x32 A) {
         uint256 ptr;
 
         assembly {
             ptr := mload(data)
         }
 
-        A = newHeader(ptr, 3, 3);
+        A = USM256Header(ptr, 3, 3);
     }
 
     /// @dev todo: compare gas costs to manual copy
-    function from(bytes memory dataBytes, uint256 n, uint256 m) internal view returns (Mat A) {
+    function from(bytes memory dataBytes, uint256 n, uint256 m) internal view returns (SM32x32 A) {
         uint256 size;
         assembly {
             // XXX
@@ -314,10 +315,10 @@ library SolMat {
             pop(staticcall(gas(), 4, add(0x20, dataBytes), mload(dataBytes), AData, size))
         }
 
-        A = newHeader(AData, n, m);
+        A = USM256Header(AData, n, m);
     }
 
-    function from_(bytes memory dataBytes, uint256 n, uint256 m) internal pure returns (Mat A) {
+    function from_(bytes memory dataBytes, uint256 n, uint256 m) internal pure returns (SM32x32 A) {
         unchecked {
             require(dataBytes.length <= (n * m * DATA_CHUNK_SIZE), "SolMat: too large");
         }
@@ -328,10 +329,10 @@ library SolMat {
             AData := add(0x20, dataBytes) // Skip length encoding.
         }
 
-        A = newHeader(AData, n, m);
+        A = USM256Header(AData, n, m);
     }
 
-    function toBytes(Mat A) internal view returns (bytes memory newData) {
+    function toBytes(SM32x32 A) internal view returns (bytes memory newData) {
         (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
 
         assembly {
@@ -348,7 +349,7 @@ library SolMat {
         }
     }
 
-    function copy(Mat A) internal view returns (Mat out) {
+    function copy(SM32x32 A) internal view returns (SM32x32 out) {
         (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
 
         uint256 size;
@@ -364,10 +365,10 @@ library SolMat {
             pop(staticcall(gas(), 4, data, size, newData, size))
         }
 
-        out = newHeader(newData, n, m);
+        out = USM256Header(newData, n, m);
     }
 
-    // function zeros(uint256 n, uint256 m) internal pure returns (Mat A) {
+    // function zeros(uint256 n, uint256 m) internal pure returns (SM32x32 A) {
     //     uint256 data;
     //     uint256 size = DATA_CHUNK_SIZE; // Hardcoding for now.
     //     // note: loading does not take into acc diff sizes
@@ -400,61 +401,82 @@ library SolMat {
 
     /* ------------- indexing ------------- */
 
-    function at(Mat A, uint256 index) internal pure returns (uint256 el) {
-        (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+    function at(SM32x32 A, uint256 index) internal pure returns (uint256 el) {
+        (uint256 n, uint256 m, uint256 data,) = header(A);
 
         unchecked {
             require(index < n * m, "SolMat: out of bounds");
         }
 
         assembly {
-            let loc := add(data, mul(sz, index))
-            el := mload(loc)
+            // let loc := add(data, mul(0x10, index))
+            // el := mload(loc)
 
-            // Clean the bits by shifting by `32 - (32 >> scale)) * 8`.
-            let shft := shl(3, sub(32, sz))
-            el := shr(shft, shl(shft, el))
+            let loc := add(data, sub(mul(8, index), 24))
+            el := and(mload(loc), 0xffffffff)
+
+            // // Clean the bits by shifting by `32 - (32 >> scale)) * 8`.
+            // let shft := shl(3, sub(32, sz))
+            // el := shr(shft, shl(shft, el))
         }
     }
 
-    function at(Mat A, uint256 i, uint256 j) internal pure returns (uint256 el) {
-        (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+    function at(SM32x32 A, uint256 i, uint256 j) internal pure returns (uint256 el) {
+        (uint256 n, uint256 m, uint256 data,) = header(A);
 
         require(i < n && j < m, "SolMat: out of bounds");
 
         assembly {
-            let loc := add(data, mul(sz, add(mul(i, m), j)))
-            el := mload(loc)
+            // let loc := add(data, mul(DATA_BYTES, add(mul(i, m), j)))
+            // el := mload(loc)
+            let loc := add(data, sub(mul(8, add(mul(i, m), j)), 24))
+            el := and(mload(loc), 0xffffffff)
         }
     }
 
-    function set(Mat A, uint256 index, uint256 value) internal pure {
-        (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+    function set(SM32x32 A, uint256 index, uint256 value) internal pure {
+        (uint256 n, uint256 m, uint256 data,) = header(A);
 
         unchecked {
             require(index < n * m, "SolMat: out of bounds");
         }
 
         assembly {
-            let loc := add(data, mul(sz, index))
-            mstore(loc, value)
+            // let slt := index &
+            let loc := add(data, sub(mul(8, index), 24))
+            let el := mload(loc)
+
+            mstore(loc, or(and(value, 0xffffffff), and(el, not(0xffffffff))))
+            // // Wipe previous slot.
+            // // and(data, not(shl(shl(5, sub(7, i)), 0xffffffff))),
+            // shr(5, shl(5, data)),
+            // // write data to slot.
+            // shl(shl(5, sub(7, and(index, 7))), and(value, 0xffffffff))
         }
+
+        // assembly {
+        //     // NOTE: need to load and merge
+        //     let loc := add(data, mul(0x10, index))
+        //     let el := mload(loc)
+        //     // mstore(loc, value << 7)
+        //     mstore(loc, value)
+        // }
     }
 
-    function set(Mat A, uint256 i, uint256 j, uint256 value) internal pure {
-        (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+    function set(SM32x32 A, uint256 i, uint256 j, uint256 value) internal pure {
+        (uint256 n, uint256 m, uint256 data,) = header(A);
 
         require(i < n && j < m, "SolMat: out of bounds");
 
         assembly {
-            let loc := add(data, mul(sz, add(mul(i, m), j)))
+            let loc := add(data, mul(DATA_BYTES, add(mul(i, m), j)))
             mstore(loc, value)
         }
     }
 
     /* ------------- functions ------------- */
 
-    function add(Mat A, uint256 a) internal pure returns (Mat C) {
+    function add(SM32x32 A, uint256 a) internal pure returns (SM32x32 C) {
         (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
 
         C = zeros(An, Am);
@@ -478,7 +500,7 @@ library SolMat {
         }
     }
 
-    function mul(Mat A, uint256 a) internal pure returns (Mat C) {
+    function mul(SM32x32 A, uint256 a) internal pure returns (SM32x32 C) {
         (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
 
         C = zeros(An, Am);
@@ -502,7 +524,7 @@ library SolMat {
         }
     }
 
-    function add(Mat A, Mat B) internal pure returns (Mat C) {
+    function add(SM32x32 A, SM32x32 B) internal pure returns (SM32x32 C) {
         (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
         (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = header(B);
 
@@ -532,7 +554,7 @@ library SolMat {
         }
     }
 
-    function dot(Mat A, Mat B) internal pure returns (Mat C) {
+    function dot(SM32x32 A, SM32x32 B) internal pure returns (SM32x32 C) {
         (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
         (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = header(B);
 
@@ -567,7 +589,7 @@ library SolMat {
         }
     }
 
-    function eq(Mat A, uint256 value) internal pure returns (bool equals) {
+    function eq(SM32x32 A, uint256 value) internal pure returns (bool equals) {
         (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
 
         equals = true;
@@ -584,9 +606,9 @@ library SolMat {
         }
     }
 
-    // function eq(Mat A, Mat B) internal pure returns (Mat C) {
-    function eq(Mat A, Mat B) internal pure returns (bool equals) {
-        if (Mat.unwrap(A) == Mat.unwrap(B)) return true;
+    // function eq(SM32x32 A, SM32x32 B) internal pure returns (SM32x32 C) {
+    function eq(SM32x32 A, SM32x32 B) internal pure returns (bool equals) {
+        if (SM32x32.unwrap(A) == SM32x32.unwrap(B)) return true;
 
         (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
         (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = header(B);
@@ -618,7 +640,7 @@ library SolMat {
         }
     }
 
-    function sum(Mat A) internal pure returns (uint256 res) {
+    function sum(SM32x32 A) internal pure returns (uint256 res) {
         (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
 
         unchecked {

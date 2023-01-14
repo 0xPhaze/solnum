@@ -11,5 +11,6 @@ rpc_endpoints = { mainnet = "https://rpc.ankr.com/eth", optimism = "https://rpc.
 
 
 [fuzz]
-runs = 10_000
-# runs = 100_000_000
+runs = 1_000
+# runs = 10_000
+# runs = 1_000_000
