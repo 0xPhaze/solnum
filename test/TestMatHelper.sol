@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "src/SolMat.sol";
+import "src/SolMat64.sol";
 import "forge-std/Test.sol";
 
-contract TestMatHelper is Test {
-    using SolMat for Mat;
+using SolMat64 for Mat64;
 
+contract TestMatHelper is Test {
     /* ------------- helpers ------------- */
 
-    function assertEq(Mat a, uint256 v) internal {
+    function assertEq(Mat64 a, uint256 v) internal {
         if (!a.eq(v)) {
-            emit log("Error: a == b not satisfied [Mat]");
+            emit log("Error: a == b not satisfied [Mat64]");
             emit log_named_uint("  Expected", v);
             emit log("    Actual");
             logMat(a);
@@ -19,9 +19,9 @@ contract TestMatHelper is Test {
         }
     }
 
-    function assertEq(Mat a, Mat b) internal {
+    function assertEq(Mat64 a, Mat64 b) internal {
         if (!a.eq(b)) {
-            emit log("Error: a == b not satisfied [Mat]");
+            emit log("Error: a == b not satisfied [Mat64]");
             emit log("  Expected");
             logMat(b);
             emit log("    Actual");
@@ -30,15 +30,15 @@ contract TestMatHelper is Test {
         }
     }
 
-    function assertNEq(Mat a, Mat b) internal {
+    function assertNEq(Mat64 a, Mat64 b) internal {
         if (a.eq(b)) {
-            emit log("Error: a != b not satisfied [Mat]");
+            emit log("Error: a != b not satisfied [Mat64]");
             logMat(b);
             fail();
         }
     }
 
-    function assertIsEye(Mat A) internal {
+    function assertIsEye(Mat64 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
         for (uint256 i; i < n; ++i) {
@@ -56,7 +56,7 @@ contract TestMatHelper is Test {
 
     /* ------------- log ------------- */
 
-    function lognewHeader(Mat A) internal view {
+    function lognewHeader(Mat64 A) internal view {
         bytes32 data;
         assembly {
             data := mload(A)
@@ -64,7 +64,7 @@ contract TestMatHelper is Test {
         console.logBytes32(data);
     }
 
-    function logMat(Mat A) public {
+    function logMat(Mat64 A) public {
         (uint256 n, uint256 m) = A.shape();
 
         string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
@@ -98,7 +98,7 @@ contract TestMatHelper is Test {
         emit log(str);
     }
 
-    // function logMem(Mat A) public {
+    // function logMem(Mat64 A) public {
     //     // (uint256 n, uint256 m) = A.shape();
     //     (uint256 n, uint256 m, uint256 data, uint256 size) = A.header();
 
