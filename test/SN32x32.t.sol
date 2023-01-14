@@ -14,7 +14,7 @@ contract TestSN32x32 is TestHelper {
 
     /// @notice `MAX/2 + MAX/2` should overflow.
     function test_add_revert_Overflow() public {
-        vm.expectRevert(Overflow.selector);
+        vm.expectRevert(SN32x32_Overflow.selector);
 
         MAX_HALF.add(MAX_HALF).add(wrap(2));
     }
@@ -24,7 +24,7 @@ contract TestSN32x32 is TestHelper {
         a = bound(a, ZERO, MAX);
         b = bound(b, MAX.sub(a), MAX);
 
-        vm.expectRevert(Overflow.selector);
+        vm.expectRevert(SN32x32_Overflow.selector);
 
         a.add(b).add(wrap(1));
     }
@@ -34,7 +34,7 @@ contract TestSN32x32 is TestHelper {
         a = bound(a, MIN, ZERO);
         b = bound(b, MIN, MIN.sub(a));
 
-        vm.expectRevert(Overflow.selector);
+        vm.expectRevert(SN32x32_Overflow.selector);
 
         a.add(b).add(wrap(-1));
     }
@@ -90,7 +90,7 @@ contract TestSN32x32 is TestHelper {
         a = bound(a, ZERO, MAX);
         b = bound(b, MIN, MIN.add(a));
 
-        vm.expectRevert(Overflow.selector);
+        vm.expectRevert(SN32x32_Overflow.selector);
 
         a.sub(b);
     }

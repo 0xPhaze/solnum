@@ -58,7 +58,7 @@ uint256 constant MAX_08_BITS = 0xff;
 //     bool T;
 // }
 
-error TooLarge();
+error USM256_TooLarge();
 
 /* ------------- header ------------- */
 
@@ -71,7 +71,7 @@ function USM256Header(uint256 data, uint256 n, uint256 m) pure returns (USM256 A
             )
     }
 
-    require((n | m | (data >> 42)) <= MAX_24_BITS, "SolMat: too large");
+    if ((n | m | (data >> 42)) > MAX_24_BITS) revert USM256_TooLarge();
 }
 
 function header(USM256 A) pure returns (uint256 n, uint256 m, uint256 data, uint256 size) {

@@ -36,14 +36,14 @@ SN32x32 constant MIN_HALF = SN32x32.wrap(uMIN_HALF);
 
 uint256 constant MASK = 0xffffffffffffffff;
 
-error Overflow();
+error SN32x32_Overflow();
 error Undefined();
 
 using {add, sub, mul, div, divUp, neg, sign, abs, eq, neq, shr, shl, lte, unwrap} for SN32x32 global;
 
 function safeCastToSN32x32(int256 uc) pure returns (SN32x32 c) {
     unchecked {
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert SN32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -55,7 +55,7 @@ function add(SN32x32 a, SN32x32 b) pure returns (SN32x32 c) {
     unchecked {
         int256 uc = int256(unwrap(a)) + unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert SN32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -65,7 +65,7 @@ function sub(SN32x32 a, SN32x32 b) pure returns (SN32x32 c) {
     unchecked {
         int256 uc = int256(unwrap(a)) - unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert SN32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -75,7 +75,7 @@ function mul(SN32x32 a, SN32x32 b) pure returns (SN32x32 c) {
     unchecked {
         int256 uc = (int256(unwrap(a)) * unwrap(b)) >> 32;
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert SN32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -85,7 +85,7 @@ function div(SN32x32 a, SN32x32 b) pure returns (SN32x32 c) {
     unchecked {
         int256 uc = (int256(unwrap(a)) << 32) / unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert SN32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -95,7 +95,7 @@ function divUp(SN32x32 a, SN32x32 b) pure returns (SN32x32 c) {
     unchecked {
         int256 uc = ((int256(unwrap(a)) << 32) + unwrap(b) - 1) / unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert SN32x32_Overflow();
 
         c = wrap(int64(uc));
     }
