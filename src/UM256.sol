@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
-
-type USM256 is uint256;
+type UM256 is uint256;
 
 using {
     sum,
@@ -29,94 +27,19 @@ using {
     eq,
     eqScalar,
     sum
-} for USM256 global;
+} for UM256 global;
 
-uint256 constant META_DATA_BITS = 24;
-// uint256 constant META_DATA_MAX = 0xffffff; // 24 bits
-// uint256 constant META_DATA_MAX = 0xffffffffffffffff; // 24 bits
-uint256 constant DATA_CHUNK_SIZE = 0x20;
+error UM256_TooLarge();
+error UM256_InvalidRange();
+error UM256_IndexOutOfBounds();
+error UM256_InvalidDimensions();
+error UM256_IncompatibleDimensions();
 
-uint256 constant WORD = 0x20;
-uint256 constant MAX_04_BITS = 0xf;
-uint256 constant MAX_24_BITS = 0xffffff;
-uint256 constant MAX_64_BITS = 0xffffffffffffffff;
-
-uint256 constant MAX_32_BITS = 0xffffffff;
-uint256 constant MAX_16_BITS = 0xffff;
 uint256 constant MAX_08_BITS = 0xff;
-
-/* ------------- header ------------- */
-
-// struct USM256Header {
-//     uint24 n;
-//     uint24 m;
-//     uint64 data;
-//     uint24 startx;
-//     uint24 starty;
-//     uint24 endx;
-//     uint24 endy;
-//     uint8 stridex;
-//     uint8 stridey;
-//     bool T;
-// }
-
-error USM256_TooLarge();
-error USM256_InvalidRange();
-error USM256_IndexOutOfBounds();
-error USM256_InvalidDimensions();
-error USM256_IncompatibleDimensions();
-
-/* ------------- header ------------- */
-
-function USM256Header(uint256 ptr, uint256 n, uint256 m) pure returns (USM256 A) {
-    A = USM256.wrap(
-        ptr << 48 // data location
-            | m << 24 | n // shape
-    );
-
-    if ((n | m | (ptr >> 40)) > MAX_24_BITS) revert USM256_TooLarge();
-}
-
-function header(USM256 A) pure returns (uint256 n, uint256 m, uint256 ptr) {
-    n = (USM256.unwrap(A)) & MAX_24_BITS;
-    m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
-    ptr = (USM256.unwrap(A) >> 48) & MAX_64_BITS;
-}
-
-function shape(USM256 A) pure returns (uint256 n, uint256 m) {
-    n = (USM256.unwrap(A)) & MAX_24_BITS;
-    m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
-}
-
-function dim0(USM256 A) pure returns (uint256 n) {
-    n = (USM256.unwrap(A)) & MAX_24_BITS;
-}
-
-function dim1(USM256 A) pure returns (uint256 m) {
-    m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
-}
-
-function length(USM256 A) pure returns (uint256 len) {
-    unchecked {
-        uint256 n = (USM256.unwrap(A)) & MAX_24_BITS;
-        uint256 m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
-
-        len = n * m;
-    }
-}
-
-function sizeBytes(USM256 A) pure returns (uint256 size) {
-    unchecked {
-        uint256 n = (USM256.unwrap(A)) & MAX_24_BITS;
-        uint256 m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
-
-        size = n * m * 32;
-    }
-}
-
-function ref(USM256 A) pure returns (uint256 ptr) {
-    ptr = (USM256.unwrap(A) >> 48) & MAX_64_BITS;
-}
+uint256 constant MAX_16_BITS = 0xffff;
+uint256 constant MAX_24_BITS = 0xffffff;
+uint256 constant MAX_32_BITS = 0xffffffff;
+uint256 constant MAX_64_BITS = 0xffffffffffffffff;
 
 /* ------------- malloc ------------- */
 
@@ -130,9 +53,74 @@ function malloc(uint256 size) pure returns (uint256 ptr) {
     }
 }
 
+/* ------------- header ------------- */
+
+struct UM256HeaderStruct {
+    uint24 n; // first dimension `dim0`
+    uint24 m; // second dimension `dim1`
+    uint64 dataPtr; // pointer to matrix memory data
+    uint24 startx; // start offset of `dim0`
+    uint24 starty; // start offset of `dim1`
+    uint24 endx; // end offset of `dim0`
+    uint24 endy; // end offset of `dim1`
+    uint8 stridex; // stride of `dim0`
+    uint8 stridey; // stride of `dim1`
+    bool T; // transposed
+}
+
+function UM256Header(uint256 ptr, uint256 n, uint256 m) pure returns (UM256 A) {
+    A = UM256.wrap(
+        ptr << 48 // data location
+            | m << 24 | n // shape
+    );
+
+    if ((n | m | (ptr >> 40)) > MAX_24_BITS) revert UM256_TooLarge();
+}
+
+function header(UM256 A) pure returns (uint256 n, uint256 m, uint256 ptr) {
+    n = (UM256.unwrap(A)) & MAX_24_BITS;
+    m = (UM256.unwrap(A) >> 24) & MAX_24_BITS;
+    ptr = (UM256.unwrap(A) >> 48) & MAX_64_BITS;
+}
+
+function shape(UM256 A) pure returns (uint256 n, uint256 m) {
+    n = (UM256.unwrap(A)) & MAX_24_BITS;
+    m = (UM256.unwrap(A) >> 24) & MAX_24_BITS;
+}
+
+function dim0(UM256 A) pure returns (uint256 n) {
+    n = (UM256.unwrap(A)) & MAX_24_BITS;
+}
+
+function dim1(UM256 A) pure returns (uint256 m) {
+    m = (UM256.unwrap(A) >> 24) & MAX_24_BITS;
+}
+
+function length(UM256 A) pure returns (uint256 len) {
+    unchecked {
+        uint256 n = (UM256.unwrap(A)) & MAX_24_BITS;
+        uint256 m = (UM256.unwrap(A) >> 24) & MAX_24_BITS;
+
+        len = n * m;
+    }
+}
+
+function sizeBytes(UM256 A) pure returns (uint256 size) {
+    unchecked {
+        uint256 n = (UM256.unwrap(A)) & MAX_24_BITS;
+        uint256 m = (UM256.unwrap(A) >> 24) & MAX_24_BITS;
+
+        size = n * m * 32;
+    }
+}
+
+function ref(UM256 A) pure returns (uint256 ptr) {
+    ptr = (UM256.unwrap(A) >> 48) & MAX_64_BITS;
+}
+
 /* ------------- constructors ------------- */
 
-function zerosUnsafe(uint256 n, uint256 m) pure returns (USM256 A) {
+function zerosUnsafe(uint256 n, uint256 m) pure returns (UM256 A) {
     unchecked {
         // Memory size in bytes.
         uint256 size = n * m * 32;
@@ -147,11 +135,11 @@ function zerosUnsafe(uint256 n, uint256 m) pure returns (USM256 A) {
 
         // Generate metadata header, skip the 32 bytes length.
         // This is only for convenience when converting to `bytes`.
-        A = USM256Header(ptr + 32, n, m);
+        A = UM256Header(ptr + 32, n, m);
     }
 }
 
-function zeros(uint256 n, uint256 m) pure returns (USM256 A) {
+function zeros(uint256 n, uint256 m) pure returns (UM256 A) {
     unchecked {
         // Memory size in bytes.
         uint256 size = n * m * 32;
@@ -168,7 +156,7 @@ function zeros(uint256 n, uint256 m) pure returns (USM256 A) {
         ptr = ptr + 32;
 
         // Generate metadata header.
-        A = USM256Header(ptr, n, m);
+        A = UM256Header(ptr, n, m);
 
         // Loop over n * m elements * 32 bytes.
         uint256 end = ptr + n * m * 32;
@@ -183,7 +171,7 @@ function zeros(uint256 n, uint256 m) pure returns (USM256 A) {
     }
 }
 
-function ones(uint256 n, uint256 m) pure returns (USM256 A) {
+function ones(uint256 n, uint256 m) pure returns (UM256 A) {
     // We can unsafely allocate a new matrix,
     // because we will write to all memory slots.
     A = zerosUnsafe(n, m);
@@ -203,10 +191,10 @@ function ones(uint256 n, uint256 m) pure returns (USM256 A) {
     }
 }
 
-function eye(uint256 n, uint256 m) pure returns (USM256 A) {
+function eye(uint256 n, uint256 m) pure returns (UM256 A) {
     unchecked {
         // Only supporting square dimensions.
-        if (n != m) revert USM256_InvalidDimensions();
+        if (n != m) revert UM256_InvalidDimensions();
 
         // Allocate a new matrix of zeros.
         A = zeros(n, m);
@@ -228,10 +216,10 @@ function eye(uint256 n, uint256 m) pure returns (USM256 A) {
     }
 }
 
-function range(uint256 start, uint256 end) pure returns (USM256 A) {
+function range(uint256 start, uint256 end) pure returns (UM256 A) {
     unchecked {
         // `start <= end` must hold.
-        if (start > end) revert USM256_InvalidRange();
+        if (start > end) revert UM256_InvalidRange();
 
         uint256 numEl = end - start;
 
@@ -256,27 +244,27 @@ function range(uint256 start, uint256 end) pure returns (USM256 A) {
     }
 }
 
-function range(uint256 end) pure returns (USM256 A) {
+function range(uint256 end) pure returns (UM256 A) {
     return range(0, end);
 }
 
-function reshape(USM256 A, uint256 nNew, uint256 mNew) pure returns (USM256 out) {
+function reshape(UM256 A, uint256 nNew, uint256 mNew) pure returns (UM256 out) {
     unchecked {
         (uint256 n, uint256 m, uint256 data) = header(A);
 
-        if (n * m != nNew * mNew) revert USM256_InvalidDimensions();
+        if (n * m != nNew * mNew) revert UM256_InvalidDimensions();
 
-        out = USM256Header(data, nNew, mNew);
+        out = UM256Header(data, nNew, mNew);
     }
 }
 
 /* ------------- indexing ------------- */
 
-function atIndex(USM256 A, uint256 index) pure returns (uint256 a) {
+function atIndex(UM256 A, uint256 index) pure returns (uint256 a) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        if (index >= n * m) revert USM256_IndexOutOfBounds();
+        if (index >= n * m) revert UM256_IndexOutOfBounds();
 
         ptr = ptr + 32 * index;
 
@@ -286,11 +274,11 @@ function atIndex(USM256 A, uint256 index) pure returns (uint256 a) {
     }
 }
 
-function setIndex(USM256 A, uint256 index, uint256 value) pure {
+function setIndex(UM256 A, uint256 index, uint256 value) pure {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        if (index >= n * m) revert USM256_IndexOutOfBounds();
+        if (index >= n * m) revert UM256_IndexOutOfBounds();
 
         ptr = ptr + 32 * index;
 
@@ -300,11 +288,11 @@ function setIndex(USM256 A, uint256 index, uint256 value) pure {
     }
 }
 
-function at(USM256 A, uint256 i, uint256 j) pure returns (uint256 a) {
+function at(UM256 A, uint256 i, uint256 j) pure returns (uint256 a) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        if (i >= n || j >= m) revert USM256_IndexOutOfBounds();
+        if (i >= n || j >= m) revert UM256_IndexOutOfBounds();
 
         ptr = ptr + 32 * (i * m + j);
 
@@ -314,11 +302,11 @@ function at(USM256 A, uint256 i, uint256 j) pure returns (uint256 a) {
     }
 }
 
-function set(USM256 A, uint256 i, uint256 j, uint256 value) pure {
+function set(UM256 A, uint256 i, uint256 j, uint256 value) pure {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        if (i >= n || j >= m) revert USM256_IndexOutOfBounds();
+        if (i >= n || j >= m) revert UM256_IndexOutOfBounds();
 
         ptr = ptr + 32 * (i * m + j);
 
@@ -330,12 +318,12 @@ function set(USM256 A, uint256 i, uint256 j, uint256 value) pure {
 
 /* ------------- Mat x Mat operators ------------- */
 
-function add(USM256 A, USM256 B) pure returns (USM256 C) {
+function add(UM256 A, UM256 B) pure returns (UM256 C) {
     unchecked {
         (uint256 nA, uint256 mA, uint256 dataA) = header(A);
         (uint256 nB, uint256 mB, uint256 dataB) = header(B);
 
-        if (nA != nB || mA != mB) revert USM256_IncompatibleDimensions();
+        if (nA != nB || mA != mB) revert UM256_IncompatibleDimensions();
 
         C = zerosUnsafe(nA, mA);
 
@@ -370,12 +358,12 @@ function add(USM256 A, USM256 B) pure returns (USM256 C) {
 ///
 /// However, it's cheaper to not keep track of `i`, `j`, `k`,
 /// but to keep running pointers to the elements of the matrix.
-function dot(USM256 A, USM256 B) pure returns (USM256 C) {
+function dot(UM256 A, UM256 B) pure returns (UM256 C) {
     unchecked {
         (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
         (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
 
-        if (mA != nB) revert USM256_IncompatibleDimensions();
+        if (mA != nB) revert UM256_IncompatibleDimensions();
 
         C = zerosUnsafe(nA, mB);
 
@@ -435,9 +423,9 @@ function dot(USM256 A, USM256 B) pure returns (USM256 C) {
     }
 }
 
-function eq(USM256 A, USM256 B) pure returns (bool equals) {
+function eq(UM256 A, UM256 B) pure returns (bool equals) {
     unchecked {
-        if (USM256.unwrap(A) == USM256.unwrap(B)) return true;
+        if (UM256.unwrap(A) == UM256.unwrap(B)) return true;
 
         (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
         (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
@@ -462,7 +450,7 @@ function eq(USM256 A, USM256 B) pure returns (bool equals) {
 
 /* ------------- Mat x scalar operators ------------- */
 
-function addScalar(USM256 A, uint256 s) pure returns (USM256 C) {
+function addScalar(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
@@ -486,13 +474,13 @@ function addScalar(USM256 A, uint256 s) pure returns (USM256 C) {
     }
 }
 
-function mulScalar(USM256 A, uint256 s) pure returns (USM256 C) {
+function mulScalar(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
-        (uint256 n, uint256 m, uint256 data) = header(A);
+        (uint256 n, uint256 m, uint256 ptr) = header(A);
 
         C = zerosUnsafe(n, m);
 
-        uint256 ptrA = data;
+        uint256 ptrA = ptr;
         uint256 endA = ptrA + n * m * 32;
         uint256 ptrC = ref(C);
 
@@ -512,11 +500,11 @@ function mulScalar(USM256 A, uint256 s) pure returns (USM256 C) {
 
 /* ------------- Mat operators ------------- */
 
-function sum(USM256 A) pure returns (uint256 s) {
+function sum(UM256 A) pure returns (uint256 s) {
     unchecked {
-        (uint256 n, uint256 m, uint256 data) = header(A);
+        (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        uint256 ptrA = data;
+        uint256 ptrA = ptr;
         uint256 endA = ptrA + n * m * 32;
 
         while (ptrA != endA) {
@@ -529,13 +517,13 @@ function sum(USM256 A) pure returns (uint256 s) {
     }
 }
 
-function eqScalar(USM256 A, uint256 value) pure returns (bool equals) {
+function eqScalar(UM256 A, uint256 value) pure returns (bool equals) {
     unchecked {
-        (uint256 n, uint256 m, uint256 data) = header(A);
+        (uint256 n, uint256 m, uint256 ptr) = header(A);
 
         equals = true;
 
-        uint256 ptrA = data;
+        uint256 ptrA = ptr;
         uint256 endA = ptrA + n * m * 32;
 
         while (ptrA != endA) {
@@ -552,74 +540,76 @@ function eqScalar(USM256 A, uint256 value) pure returns (bool equals) {
 
 /* ------------- conversions ------------- */
 
-function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (USM256 A) {
+function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256 A) {
     unchecked {
-        if (n * m * 32 > dataBytes.length) revert USM256_TooLarge();
+        if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
-        uint256 dataA;
+        uint256 ptr;
 
         assembly {
             // Actual data is located after length encoding.
-            dataA := add(32, dataBytes)
+            ptr := add(32, dataBytes)
         }
 
-        A = USM256Header(dataA, n, m);
+        A = UM256Header(ptr, n, m);
     }
 }
 
-function _bytes(USM256 A) pure returns (bytes memory dataBytes) {
-    uint256 data = ref(A);
+function _bytes(UM256 A) pure returns (bytes memory dataBytes) {
+    uint256 ptr = ref(A);
 
     assembly {
         // This only works under the assumption that
         // we always store the size in bytes before the data.
-        dataBytes := sub(data, 32)
+        dataBytes := sub(ptr, 32)
     }
 }
 
 /// @dev todo: compare gas costs to manual copy
-function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (USM256 A) {
+function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (UM256 A) {
     unchecked {
+        if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
+
         uint256 size = n * m * 32;
-        uint256 dataA = malloc(32 + size);
+        uint256 ptr = malloc(32 + size);
 
         assembly {
             // Store bytes size.
-            mstore(dataA, size)
+            mstore(ptr, size)
             // Actual data will be stored in next mem slot.
-            dataA := add(dataA, 32)
-            // Use address(4) precompile to copy memory data `dataBytes` to `dataA`.
-            pop(staticcall(gas(), 4, add(32, dataBytes), mload(dataBytes), dataA, size))
+            ptr := add(ptr, 32)
+            // Use `address(4)` precompile to copy memory data `dataBytes` to `ptr`.
+            pop(staticcall(gas(), 4, add(32, dataBytes), mload(dataBytes), ptr, size))
         }
 
-        A = USM256Header(dataA, n, m);
+        A = UM256Header(ptr, n, m);
     }
 }
 
-function copy(USM256 A) view returns (USM256 B) {
+function copy(UM256 A) view returns (UM256 B) {
     unchecked {
-        (uint256 n, uint256 m, uint256 data) = header(A);
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
         uint256 size = n * m * 32;
-        uint256 dataB = malloc(32 + size);
+        uint256 ptrB = malloc(32 + size);
 
         assembly {
             // Store bytes size.
-            mstore(dataB, size)
+            mstore(ptrB, size)
             // Actual data will be stored in next mem slot.
-            dataB := add(dataB, 32)
-            // Use address(4) precompile to copy memory data `dataBytes` to `dataB`.
-            pop(staticcall(gas(), 4, data, size, dataB, size))
+            ptrB := add(ptrB, 32)
+            // Use `address(4)` precompile to copy memory data `dataBytes` to `ptrB`.
+            pop(staticcall(gas(), 4, ptrA, size, ptrB, size))
         }
 
-        B = USM256Header(dataB, n, m);
+        B = UM256Header(ptrB, n, m);
     }
 }
 
 /* ------------- unsafe conversions ------------- */
 
 /// @dev `data` needs to be contiguous in memory.
-function fromUnsafe_(uint8[3][4] memory data) pure returns (USM256 A) {
+function fromUnsafe_(uint8[3][4] memory data) pure returns (UM256 A) {
     uint256 ptr;
 
     assembly {
@@ -633,15 +623,15 @@ function fromUnsafe_(uint8[3][4] memory data) pure returns (USM256 A) {
         mstore(sub(ptr, 32), 384)
     }
 
-    A = USM256Header(ptr, 4, 3);
+    A = UM256Header(ptr, 4, 3);
 }
 
-function fromUnsafe_(uint8[3][3] memory data) pure returns (USM256 A) {
+function fromUnsafe_(uint8[3][3] memory data) pure returns (UM256 A) {
     uint256 ptr;
 
     assembly {
         ptr := mload(data)
     }
 
-    A = USM256Header(ptr, 3, 3);
+    A = UM256Header(ptr, 3, 3);
 }

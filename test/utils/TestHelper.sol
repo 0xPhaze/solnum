@@ -1,87 +1,85 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "src/SN32x32.sol";
-import "src/SM32x32.sol";
-import "src/USM256.sol";
+import {N32x32} from "src/N32x32.sol";
+import {M32x32} from "src/M32x32.sol";
+import {UM256} from "src/UM256.sol";
 
 import "forge-std/Test.sol";
 
-using SM32x32Lib for SM32x32;
-
 contract TestHelper is Test {
-    /* ------------- SN32x32 ------------- */
+    /* ------------- N32x32 ------------- */
 
-    function assertEq(SN32x32 a, SN32x32 b) internal {
-        if (SN32x32.unwrap(a) != SN32x32.unwrap(b)) {
-            emit log("Error: a = b not satisfied [SN32x32]");
-            emit log_named_int("  Expected", SN32x32.unwrap(b));
-            emit log_named_int("    Actual", SN32x32.unwrap(a));
+    function assertEq(N32x32 a, N32x32 b) internal {
+        if (N32x32.unwrap(a) != N32x32.unwrap(b)) {
+            emit log("Error: a = b not satisfied [N32x32]");
+            emit log_named_int("  Expected", N32x32.unwrap(b));
+            emit log_named_int("    Actual", N32x32.unwrap(a));
             fail();
         }
     }
 
-    function assertGte(SN32x32 a, SN32x32 b) internal {
-        if (SN32x32.unwrap(a) < SN32x32.unwrap(b)) {
-            emit log("Error: a >= b not satisfied [SN32x32]");
-            emit log_named_int("  Value a", SN32x32.unwrap(b));
-            emit log_named_int("  Value b", SN32x32.unwrap(a));
+    function assertGte(N32x32 a, N32x32 b) internal {
+        if (N32x32.unwrap(a) < N32x32.unwrap(b)) {
+            emit log("Error: a >= b not satisfied [N32x32]");
+            emit log_named_int("  Value a", N32x32.unwrap(b));
+            emit log_named_int("  Value b", N32x32.unwrap(a));
             fail();
         }
     }
 
-    function assertGt(SN32x32 a, SN32x32 b) internal {
-        if (SN32x32.unwrap(a) <= SN32x32.unwrap(b)) {
-            emit log("Error: a > b not satisfied [SN32x32]");
-            emit log_named_int("  Value a", SN32x32.unwrap(b));
-            emit log_named_int("  Value b", SN32x32.unwrap(a));
+    function assertGt(N32x32 a, N32x32 b) internal {
+        if (N32x32.unwrap(a) <= N32x32.unwrap(b)) {
+            emit log("Error: a > b not satisfied [N32x32]");
+            emit log_named_int("  Value a", N32x32.unwrap(b));
+            emit log_named_int("  Value b", N32x32.unwrap(a));
             fail();
         }
     }
 
-    function bound(SN32x32 x, SN32x32 min, SN32x32 max) internal view returns (SN32x32 result) {
-        result = SN32x32.wrap(int64(bound(int256(x.unwrap()), int256(min.unwrap()), int256(max.unwrap()))));
+    function bound(N32x32 x, N32x32 min, N32x32 max) internal view returns (N32x32 result) {
+        result = N32x32.wrap(int64(bound(int256(x.unwrap()), int256(min.unwrap()), int256(max.unwrap()))));
     }
 
-    function bound(SN32x32 x, int64 min, SN32x32 max) internal view returns (SN32x32 result) {
-        result = SN32x32.wrap(int64(bound(int256(x.unwrap()), int256(min), int256(max.unwrap()))));
+    function bound(N32x32 x, int64 min, N32x32 max) internal view returns (N32x32 result) {
+        result = N32x32.wrap(int64(bound(int256(x.unwrap()), int256(min), int256(max.unwrap()))));
     }
 
-    function bound(SN32x32 x, SN32x32 min, int64 max) internal view returns (SN32x32 result) {
-        result = SN32x32.wrap(int64(bound(int256(x.unwrap()), int256(min.unwrap()), int256(max))));
+    function bound(N32x32 x, N32x32 min, int64 max) internal view returns (N32x32 result) {
+        result = N32x32.wrap(int64(bound(int256(x.unwrap()), int256(min.unwrap()), int256(max))));
     }
 
-    function bound(SN32x32 x, int64 min, int64 max) internal view returns (SN32x32 result) {
-        result = SN32x32.wrap(int64(bound(int256(x.unwrap()), int256(min), int256(max))));
+    function bound(N32x32 x, int64 min, int64 max) internal view returns (N32x32 result) {
+        result = N32x32.wrap(int64(bound(int256(x.unwrap()), int256(min), int256(max))));
     }
 
-    function assertApproxEqAbs(SN32x32 a, SN32x32 b, SN32x32 maxDelta, string memory err) internal virtual {
+    function assertApproxEqAbs(N32x32 a, N32x32 b, N32x32 maxDelta, string memory err) internal virtual {
         assertApproxEqAbs(a.unwrap(), b.unwrap(), uint256(int256(maxDelta.unwrap())), err);
     }
 
-    function assertApproxEqAbs(SN32x32 a, SN32x32 b, SN32x32 maxDelta) internal virtual {
+    function assertApproxEqAbs(N32x32 a, N32x32 b, N32x32 maxDelta) internal virtual {
         assertApproxEqAbs(a.unwrap(), b.unwrap(), uint256(int256(maxDelta.unwrap())));
     }
 
-    function assertApproxEqAbs(SN32x32 a, SN32x32 b, uint256 maxDelta, string memory err) internal virtual {
+    function assertApproxEqAbs(N32x32 a, N32x32 b, uint256 maxDelta, string memory err) internal virtual {
         assertApproxEqAbs(a.unwrap(), b.unwrap(), maxDelta, err);
     }
 
-    function assertApproxEqAbs(SN32x32 a, SN32x32 b, uint256 maxDelta) internal virtual {
+    function assertApproxEqAbs(N32x32 a, N32x32 b, uint256 maxDelta) internal virtual {
         assertApproxEqAbs(a.unwrap(), b.unwrap(), maxDelta);
     }
 
-    function assertApproxEqRel(SN32x32 a, SN32x32 b, uint256 maxPercentDelta) internal virtual {
+    function assertApproxEqRel(N32x32 a, N32x32 b, uint256 maxPercentDelta) internal virtual {
         assertApproxEqRel(a.unwrap(), b.unwrap(), maxPercentDelta);
     }
 
     /* ------------- log ------------- */
 
-    function logN(SN32x32 a) public {
+    function logN(N32x32 a) public {
         logN("", a);
     }
 
-    function logN(string memory name, SN32x32 a) public {
+    function logN(string memory name, N32x32 a) public {
         int64 uInt64;
         int256 uInt256;
         bytes32 uBytes;
@@ -104,7 +102,7 @@ contract TestHelper is Test {
     //     // logN("HALF", HALF);
     //     // console.log();
     //     // logN("TENTH", ONE.div(10));
-    //     // emit log_named_int('MIN:', SN32x32.)
+    //     // emit log_named_int('MIN:', N32x32.)
     // }
 
     modifier canRevert() {
@@ -125,11 +123,11 @@ contract TestHelper is Test {
         }
     }
 
-    /* ------------- USM256 ------------- */
+    /* ------------- UM256 ------------- */
 
-    function assertEq(USM256 A, uint256 s) internal {
+    function assertEq(UM256 A, uint256 s) internal {
         if (!A.eqScalar(s)) {
-            emit log("Error: A == B not satisfied [USM256]");
+            emit log("Error: A == B not satisfied [UM256]");
             emit log_named_uint("  Expected", s);
             emit log("    Actual");
             logMat(A);
@@ -137,9 +135,9 @@ contract TestHelper is Test {
         }
     }
 
-    function assertEq(USM256 A, USM256 B) internal {
+    function assertEq(UM256 A, UM256 B) internal {
         if (!A.eq(B)) {
-            emit log("Error: A == B not satisfied [USM256]");
+            emit log("Error: A == B not satisfied [UM256]");
             emit log("  Expected");
             logMat(B);
             emit log("    Actual");
@@ -148,15 +146,15 @@ contract TestHelper is Test {
         }
     }
 
-    function assertNEq(USM256 A, USM256 B) internal {
+    function assertNEq(UM256 A, UM256 B) internal {
         if (A.eq(B)) {
-            emit log("Error: A != B not satisfied [USM256]");
+            emit log("Error: A != B not satisfied [UM256]");
             logMat(B);
             fail();
         }
     }
 
-    function assertIsEye(USM256 A) internal {
+    function assertIsEye(UM256 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
         for (uint256 i; i < n; ++i) {
@@ -166,11 +164,11 @@ contract TestHelper is Test {
         }
     }
 
-    /* ------------- SM32x32 ------------- */
+    /* ------------- M32x32 ------------- */
 
-    function assertEq(SM32x32 a, uint256 v) internal {
-        if (!a.eq(v)) {
-            emit log("Error: a == b not satisfied [SM32x32]");
+    function assertEq(M32x32 a, uint256 v) internal {
+        if (!a.eqScalar(v)) {
+            emit log("Error: a == b not satisfied [M32x32]");
             emit log_named_uint("  Expected", v);
             emit log("    Actual");
             logMat(a);
@@ -178,9 +176,9 @@ contract TestHelper is Test {
         }
     }
 
-    function assertEq(SM32x32 a, SM32x32 b) internal {
+    function assertEq(M32x32 a, M32x32 b) internal {
         if (!a.eq(b)) {
-            emit log("Error: a == b not satisfied [SM32x32]");
+            emit log("Error: a == b not satisfied [M32x32]");
             emit log("  Expected");
             logMat(b);
             emit log("    Actual");
@@ -189,15 +187,15 @@ contract TestHelper is Test {
         }
     }
 
-    function assertNEq(SM32x32 a, SM32x32 b) internal {
+    function assertNEq(M32x32 a, M32x32 b) internal {
         if (a.eq(b)) {
-            emit log("Error: a != b not satisfied [SM32x32]");
+            emit log("Error: a != b not satisfied [M32x32]");
             logMat(b);
             fail();
         }
     }
 
-    function assertIsEye(SM32x32 A) internal {
+    function assertIsEye(M32x32 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
         for (uint256 i; i < n; ++i) {
@@ -245,7 +243,7 @@ contract TestHelper is Test {
 
     /* ------------- log ------------- */
 
-    function lognewHeader(SM32x32 A) internal view {
+    function lognewHeader(M32x32 A) internal view {
         bytes32 data;
         assembly {
             data := mload(A)
@@ -253,7 +251,7 @@ contract TestHelper is Test {
         console.logBytes32(data);
     }
 
-    function logMat(USM256 A) internal {
+    function logMat(UM256 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
         string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
@@ -272,7 +270,7 @@ contract TestHelper is Test {
         emit log(str);
     }
 
-    function logMat(SM32x32 A) internal {
+    function logMat(M32x32 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
         string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
@@ -306,7 +304,7 @@ contract TestHelper is Test {
         emit log(str);
     }
 
-    // function logMem(SM32x32 A) public {
+    // function logMem(M32x32 A) public {
     //     // (uint256 n, uint256 m) = A.shape();
     //     (uint256 n, uint256 m, uint256 data, uint256 size) = A.header();
 

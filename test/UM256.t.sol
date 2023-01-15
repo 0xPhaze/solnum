@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "src/USM256.sol";
-import "./TestHelper.sol";
+import "src/UM256.sol";
+import "./utils/TestHelper.sol";
 
-contract TestUSM256 is TestHelper {
-    // uint8[0][1] MATRIX_10;
+contract TestUM256 is TestHelper {
     uint8[3][3] MATRIX_33 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
     uint8[3][4] MATRIX_43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
 
-    USM256 memSafeTestMat;
+    UM256 memSafeTestMat;
 
     /* ------------- header ------------- */
 
     function test_header(uint64 data, uint24 n, uint24 m) public {
-        USM256 A = USM256Header(data, n, m);
+        UM256 A = UM256Header(data, n, m);
         (uint256 nA, uint256 mA, uint256 dataA) = A.header();
 
         assertEq(nA, n);
@@ -57,7 +56,7 @@ contract TestUSM256 is TestHelper {
 
         uint256 memPtr = freeMemPtr();
         uint256 size = n * m * 32;
-        USM256 A = zeros(n, m);
+        UM256 A = zeros(n, m);
 
         assertEq(freeMemPtr() - memPtr, size + 32);
         assertEq(A.ref(), memPtr + 32);
@@ -71,7 +70,7 @@ contract TestUSM256 is TestHelper {
     }
 
     function test_eye() public {
-        USM256 A = eye(3, 3);
+        UM256 A = eye(3, 3);
 
         assertIsEye(A);
     }
@@ -80,7 +79,7 @@ contract TestUSM256 is TestHelper {
         n = bound(n, 0, 10);
         m = bound(m, 0, 10);
 
-        USM256 A = ones(n, m);
+        UM256 A = ones(n, m);
 
         assertEq(A, 1);
     }
@@ -91,7 +90,7 @@ contract TestUSM256 is TestHelper {
         n = bound(n, 1, 10);
         m = bound(m, 1, 10);
 
-        USM256 A = zeros(n, m);
+        UM256 A = zeros(n, m);
 
         uint256[10][10] memory B;
 
@@ -116,12 +115,11 @@ contract TestUSM256 is TestHelper {
         }
     }
 
-    function test_range(uint256 n, uint256 start, uint256 len) public {
-        n = bound(n, 1, 10);
+    function test_range(uint256 start, uint256 len) public {
         len = bound(len, 0, 50);
         start = bound(start, 0, 100_000);
 
-        USM256 A = range(start, start + len);
+        UM256 A = range(start, start + len);
 
         for (uint256 i; i < len; i++) {
             assertEq(A.atIndex(i), start + i);
@@ -129,8 +127,8 @@ contract TestUSM256 is TestHelper {
     }
 
     function test_reshape() public {
-        USM256 A = range(1, 13);
-        USM256 B = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+        UM256 A = range(1, 13);
+        UM256 B = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
         assertEq(A.reshape(4, 3), B);
         assertNEq(A.reshape(3, 4), B);
@@ -139,7 +137,7 @@ contract TestUSM256 is TestHelper {
     /* ------------- conversions ------------- */
 
     function test_from() public {
-        USM256 A = fromUnsafe_(MATRIX_43);
+        UM256 A = fromUnsafe_(MATRIX_43);
         (uint256 n, uint256 m) = (4, 3);
 
         for (uint256 i; i < n; ++i) {
@@ -156,8 +154,8 @@ contract TestUSM256 is TestHelper {
     }
 
     function test_from_bytes() public {
-        USM256 A = fromUnsafe_(MATRIX_43);
-        USM256 B = from_(abi.encode(MATRIX_43), 4, 3);
+        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 B = from_(abi.encode(MATRIX_43), 4, 3);
 
         (uint256 nA, uint256 mA, uint256 dataA) = A.header();
         (uint256 nB, uint256 mB, uint256 dataB) = B.header();
@@ -171,18 +169,18 @@ contract TestUSM256 is TestHelper {
     }
 
     function test_toBytes() public {
-        USM256 A = fromUnsafe_(MATRIX_43);
-        USM256 B = from_(A._bytes(), 4, 3);
+        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 B = from_(A._bytes(), 4, 3);
 
         // The header data should actually be equal now,
         // because we're referencing the same underlying data.
         assertEq(B._bytes().length, 4 * 3 * 32);
-        assertEq(USM256.unwrap(A), USM256.unwrap(B));
+        assertEq(UM256.unwrap(A), UM256.unwrap(B));
     }
 
     function test_copy() public {
-        USM256 A = fromUnsafe_(MATRIX_43);
-        USM256 B = A.copy();
+        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 B = A.copy();
 
         assertEq(A, B);
         assertTrue(A.ref() != B.ref());
@@ -191,8 +189,8 @@ contract TestUSM256 is TestHelper {
     /* ------------- functions ------------- */
 
     function test_eq() public {
-        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-        USM256 B = A.copy();
+        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 B = A.copy();
 
         assertEq(A, B);
 
@@ -204,45 +202,45 @@ contract TestUSM256 is TestHelper {
     }
 
     function test_sum() public {
-        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
         assertEq(A.sum(), 45);
     }
 
     function test_addScalar() public {
-        USM256 A = range(1, 10);
+        UM256 A = range(1, 10);
 
         assertEq(A.addScalar(1), range(2, 11));
         assertEq(A.addScalar(10), range(11, 20));
     }
 
     function test_mulScalar() public {
-        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-        USM256 B = fromUnsafe_([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
+        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 B = fromUnsafe_([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
 
         assertEq(A.mulScalar(2), B);
     }
 
     function test_dot() public {
-        USM256 A = fromUnsafe_([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-        USM256 B = fromUnsafe_([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-        USM256 C = fromUnsafe_([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
+        UM256 A = fromUnsafe_([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        UM256 B = fromUnsafe_([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        UM256 C = fromUnsafe_([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
         assertEq(A.dot(B), C);
         assertNEq(B.dot(A), C);
     }
 
     function test_add() public {
-        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-        USM256 B = fromUnsafe_([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-        USM256 C = fromUnsafe_([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
+        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 B = fromUnsafe_([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+        UM256 C = fromUnsafe_([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
 
         assertEq(A.add(B), C);
         assertEq(A.add(zeros(3, 3)), A);
     }
 
     function test_eqScalar() public {
-        USM256 A = range(1, 10);
+        UM256 A = range(1, 10);
 
         assertFalse(A.eqScalar(0));
         assertTrue(A.mulScalar(0).eqScalar(0));
@@ -267,19 +265,19 @@ contract TestUSM256 is TestHelper {
     }
 
     function test__perf_addScalar_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
 
         A.addScalar(1);
     }
 
     function test__perf_mulScalar_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
 
         A.mulScalar(1);
     }
 
     function test__perf_eqScalar_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
 
         A.set(100, 100, 3);
 
@@ -287,35 +285,35 @@ contract TestUSM256 is TestHelper {
     }
 
     function test__perf_add_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
-        USM256 B = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
+        UM256 B = zerosUnsafe(128, 128);
 
         A.add(B);
     }
 
     function test__perf_dot_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
-        USM256 B = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
+        UM256 B = zerosUnsafe(128, 128);
 
         A.dot(B);
     }
 
     function test__perf_sum_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
 
         A.sum();
     }
 
     function test__perf_eq_128() public pure {
-        USM256 A = zerosUnsafe(128, 128);
-        USM256 B = zerosUnsafe(128, 128);
+        UM256 A = zerosUnsafe(128, 128);
+        UM256 B = zerosUnsafe(128, 128);
 
         A.eq(B);
     }
 
     /* ------------- memory safety ------------- */
 
-    modifier testMemorySafe(USM256 A) {
+    modifier testMemorySafe(UM256 A) {
         memSafeTestMat = A;
 
         uint256 loc1 = freeMemPtr();
