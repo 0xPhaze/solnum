@@ -385,8 +385,8 @@ function dot(USM256 A, USM256 B) pure returns (USM256 C) {
         uint256 ptrARowSize = 32 * mA;
         uint256 ptrBRowSize = 32 * mB;
 
-        uint256 ptrALastRow = 32 * nA * mA;
-        uint256 ptrARow; // Updates by row size of `A` in i-loop.
+        uint256 ptrALastRow = dataPtrA + 32 * nA * mA;
+        uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
 
         // Loop over `C`s `i` indices.
         while (ptrARow != ptrALastRow) {
@@ -410,7 +410,7 @@ function dot(USM256 A, USM256 B) pure returns (USM256 C) {
                     // k-loop start.
 
                     assembly {
-                        let a := mload(add(dataPtrA, ptrA)) // Load A[i,k].
+                        let a := mload(ptrA) // Load A[i,k].
                         let b := mload(add(dataPtrB, ptrB)) // Load B[k,j].
 
                         c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
