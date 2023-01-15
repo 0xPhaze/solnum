@@ -115,9 +115,9 @@ library SM32x32Lib {
         }
     }
 
-    /* ------------- alloc ------------- */
+    /* ------------- malloc ------------- */
 
-    function _alloc(uint256 n, uint256 m, uint256 scale) internal pure returns (uint256 data) {
+    function malloc(uint256 n, uint256 m, uint256 scale) internal pure returns (uint256 data) {
         assembly {
             data := mload(0x40)
             let size := mul(mul(n, m), shr(scale, WORD))
@@ -128,7 +128,7 @@ library SM32x32Lib {
         }
     }
 
-    function _alloc(uint256 n, uint256 m) internal pure returns (uint256 data) {
+    function malloc(uint256 n, uint256 m) internal pure returns (uint256 data) {
         assembly {
             data := mload(0x40)
             let size := mul(mul(n, m), WORD)
@@ -139,7 +139,7 @@ library SM32x32Lib {
         }
     }
 
-    function _alloc(uint256 size) internal pure returns (uint256 data) {
+    function malloc(uint256 size) internal pure returns (uint256 data) {
         assembly {
             data := mload(0x40)
 
@@ -153,7 +153,7 @@ library SM32x32Lib {
 
     function zeros(uint256 n, uint256 m, uint256 scale) internal pure returns (SM32x32 A) {
         // Allocate memory space for matrix.
-        uint256 data = _alloc(n, m, scale);
+        uint256 data = malloc(n, m, scale);
 
         // Generate metadata header.
         A = USM256Header(data, n, m, scale);
@@ -161,7 +161,7 @@ library SM32x32Lib {
 
     function zeros(uint256 n, uint256 m) internal pure returns (SM32x32 A) {
         // Allocate memory space for matrix.
-        uint256 data = _alloc(n, m);
+        uint256 data = malloc(n, m);
 
         // Generate metadata header.
         A = USM256Header(data, n, m);
@@ -169,7 +169,7 @@ library SM32x32Lib {
 
     function zeros(uint256 m) internal pure returns (SM32x32 A) {
         // Allocate memory space for matrix.
-        uint256 data = _alloc(1, m);
+        uint256 data = malloc(1, m);
 
         // Generate metadata header.
         A = USM256Header(data, 1, m);
@@ -308,7 +308,7 @@ library SM32x32Lib {
             size := mul(DATA_CHUNK_SIZE, mul(n, m))
         }
 
-        uint256 AData = _alloc(size);
+        uint256 AData = malloc(size);
 
         assembly {
             // Use address(4) precompile to copy memory data `dataBytes` to `AData`.
@@ -358,7 +358,7 @@ library SM32x32Lib {
             size := mul(sz, mul(n, m))
         }
 
-        uint256 newData = _alloc(size);
+        uint256 newData = malloc(size);
 
         assembly {
             // Use address(4) precompile to copy memory data `dataBytes` to `newData`.

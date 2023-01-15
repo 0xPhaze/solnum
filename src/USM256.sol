@@ -10,22 +10,24 @@ using {
     header,
     shape,
     dim0,
-    diA,
+    dim1,
     length,
     sizeBytes,
     ref,
     reshape,
-    toBytes,
+    _bytes,
     copy,
     at,
     atIndex,
     set,
     setIndex,
     add,
-    mul,
+    addScalar,
+    mulScalar,
     add,
     dot,
     eq,
+    eqScalar,
     sum
 } for USM256 global;
 
@@ -59,495 +61,492 @@ uint256 constant MAX_08_BITS = 0xff;
 // }
 
 error USM256_TooLarge();
+error USM256_InvalidRange();
+error USM256_IndexOutOfBounds();
+error USM256_InvalidDimensions();
+error USM256_IncompatibleDimensions();
 
 /* ------------- header ------------- */
 
 function USM256Header(uint256 data, uint256 n, uint256 m) pure returns (USM256 A) {
-    assembly {
-        A :=
-            or(
-                shl(56, data), // data location
-                or(shl(24, m), n) // shape
-            )
-    }
+    A = USM256.wrap(
+        data << 48 // data location
+            | m << 24 | n // shape
+    );
 
-    if ((n | m | (data >> 42)) > MAX_24_BITS) revert USM256_TooLarge();
+    if ((n | m | (data >> 40)) > MAX_24_BITS) revert USM256_TooLarge();
 }
 
-function header(USM256 A) pure returns (uint256 n, uint256 m, uint256 data, uint256 size) {
-    assembly {
-        n := and(A, MAX_24_BITS)
-        m := and(shr(24, A), MAX_24_BITS)
-        size := shr(and(shr(48, A), MAX_04_BITS), WORD)
-        data := and(shr(56, A), MAX_64_BITS)
-    }
+function header(USM256 A) pure returns (uint256 n, uint256 m, uint256 data) {
+    n = (USM256.unwrap(A)) & MAX_24_BITS;
+    m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
+    data = (USM256.unwrap(A) >> 48) & MAX_64_BITS;
 }
 
 function shape(USM256 A) pure returns (uint256 n, uint256 m) {
-    assembly {
-        n := and(A, MAX_24_BITS)
-        m := and(shr(24, A), MAX_24_BITS)
-    }
+    n = (USM256.unwrap(A)) & MAX_24_BITS;
+    m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
 }
 
 function dim0(USM256 A) pure returns (uint256 n) {
-    assembly {
-        n := and(A, MAX_24_BITS)
-    }
+    n = (USM256.unwrap(A)) & MAX_24_BITS;
 }
 
-function diA(USM256 A) pure returns (uint256 m) {
-    assembly {
-        m := and(shr(24, A), MAX_24_BITS)
-    }
+function dim1(USM256 A) pure returns (uint256 m) {
+    m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
 }
 
 function length(USM256 A) pure returns (uint256 len) {
-    assembly {
-        let n := and(A, MAX_24_BITS)
-        let m := and(shr(24, A), MAX_24_BITS)
-        len := mul(n, m)
+    unchecked {
+        uint256 n = (USM256.unwrap(A)) & MAX_24_BITS;
+        uint256 m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
+
+        len = n * m;
     }
 }
 
 function sizeBytes(USM256 A) pure returns (uint256 size) {
-    assembly {
-        let n := and(A, MAX_24_BITS)
-        let m := and(shr(24, A), MAX_24_BITS)
-        let sb := shr(and(shr(48, A), MAX_04_BITS), WORD)
-        size := mul(mul(n, m), sb)
+    unchecked {
+        uint256 n = (USM256.unwrap(A)) & MAX_24_BITS;
+        uint256 m = (USM256.unwrap(A) >> 24) & MAX_24_BITS;
+
+        size = n * m * 32;
     }
 }
 
 function ref(USM256 A) pure returns (uint256 data) {
-    assembly {
-        data := and(shr(56, A), MAX_64_BITS)
-    }
+    data = (USM256.unwrap(A) >> 48) & MAX_64_BITS;
 }
 
-/* ------------- alloc ------------- */
+/* ------------- malloc ------------- */
 
-function _alloc(uint256 n, uint256 m, uint256 scale) pure returns (uint256 data) {
+function malloc(uint256 size) pure returns (uint256 ptr) {
     assembly {
-        data := mload(0x40)
-        let size := mul(mul(n, m), shr(scale, WORD))
+        // Load free memory pointer.
+        ptr := mload(0x40)
 
         // Update free memory pointer.
-        // Round up to next multiple of 32 bytes.
-        mstore(0x40, add(data, and(add(size, 0x1f), not(0x1f))))
-    }
-}
-
-function _alloc(uint256 n, uint256 m) pure returns (uint256 data) {
-    assembly {
-        data := mload(0x40)
-        let size := mul(mul(n, m), WORD)
-
-        // Update free memory pointer.
-        // Round up to next multiple of 32 bytes.
-        mstore(0x40, add(data, and(add(size, 0x1f), not(0x1f))))
-    }
-}
-
-function _alloc(uint256 size) pure returns (uint256 data) {
-    assembly {
-        data := mload(0x40)
-
-        // Update free memory pointer.
-        // Round up to next multiple of 32 bytes.
-        mstore(0x40, add(data, and(add(size, 0x1f), not(0x1f))))
+        mstore(0x40, add(ptr, size))
+        // mstore(0x40, add(ptr, and(add(size, 0x1f), not(0x1f))))
     }
 }
 
 /* ------------- constructors ------------- */
 
-function zeros(uint256 n, uint256 m) pure returns (USM256 A) {
-    // Allocate memory space for matrix.
-    uint256 data = _alloc(n, m);
+function zerosUnsafe(uint256 n, uint256 m) pure returns (USM256 A) {
+    unchecked {
+        // Memory size in bytes.
+        uint256 size = n * m * 32;
+        // Allocate memory space for matrix.
+        // Add 32 bytes to store the byte size.
+        uint256 data = malloc(32 + size);
 
-    // Generate metadata header.
-    A = USM256Header(data, n, m);
+        assembly {
+            // Store the bytes size.
+            mstore(data, size)
+        }
+
+        // Generate metadata header, skip the 32 bytes length.
+        // This is only for convenience when converting to `bytes`.
+        A = USM256Header(data + 32, n, m);
+    }
 }
 
-function zeros(uint256 m) pure returns (USM256 A) {
-    // Allocate memory space for matrix.
-    uint256 data = _alloc(1, m);
+function zeros(uint256 n, uint256 m) pure returns (USM256 A) {
+    unchecked {
+        // Memory size in bytes.
+        uint256 size = n * m * 32;
+        // Allocate memory space for matrix.
+        // Add 32 bytes to store the byte size.
+        uint256 data = malloc(32 + size);
 
-    // Generate metadata header.
-    A = USM256Header(data, 1, m);
+        assembly {
+            // Store the bytes size.
+            mstore(data, size)
+        }
+
+        // Skip the 32 bytes length.
+        data = data + 32;
+
+        assembly {
+            // Get pointer to data location.
+            let ptr := data
+            // We end after n * m elements * 32 bytes.
+            let end := add(ptr, mul(mul(n, m), 32))
+
+            // Iterate over all elements and store `0`s.
+            // We cannot know for sure whether these are cleared.
+            for {} lt(ptr, end) {} {
+                // Store `0` at current pointer location.
+                mstore(ptr, 0)
+                // Advance pointer to next slot.
+                ptr := add(ptr, 32)
+            }
+        }
+
+        // Generate metadata header.
+        A = USM256Header(data, n, m);
+    }
 }
 
 function ones(uint256 n, uint256 m) pure returns (USM256 A) {
-    A = zeros(n, m);
+    // We can unsafely allocate a new matrix,
+    // because we will write to all memory slots.
+    A = zerosUnsafe(n, m);
 
-    (,, uint256 data, uint256 sz) = header(A);
+    // Obtain a reference to matrix data location.
+    uint256 ptr = ref(A);
 
     assembly {
-        let ptr := data
-        let len := mul(n, m)
-        let end := add(ptr, mul(mul(len, m), sz))
+        // We end after n * m elements * 32 bytes.
+        let end := add(ptr, mul(mul(n, m), 32))
 
+        // Iterate over all elements and store `1`s.
         for {} lt(ptr, end) {} {
+            // Store `1` at current pointer location.
             mstore(ptr, 1)
-            ptr := add(ptr, sz)
+            // Advance pointer to next slot.
+            ptr := add(ptr, 32)
         }
     }
 }
 
-function ones(uint256 m) pure returns (USM256 A) {
-    return ones(1, m);
-}
-
 function eye(uint256 n, uint256 m) pure returns (USM256 A) {
-    A = zeros(n, m);
+    A = zerosUnsafe(n, m);
 
-    uint256 size = WORD;
     uint256 len = (n < m) ? n : m;
+
+    // Obtain a reference to matrix data location.
     uint256 ptr = ref(A);
 
     assembly {
-        let end := add(ptr, mul(mul(len, m), size))
+        // We end after n * m elements * 32 bytes.
+        let end := add(ptr, mul(mul(len, m), 32))
 
+        // TODO: fix, overwrite all elements.
+        // Iterate over all elements.
         for {} lt(ptr, end) {} {
+            // Store `1` at current pointer location.
             mstore(ptr, 1)
-            ptr := add(ptr, mul(size, add(1, m)))
+            ptr := add(ptr, mul(32, add(1, m)))
+            // Advance pointer to next slot.
+            // ptr := add(ptr, 32)
         }
     }
 }
 
 function range(uint256 start, uint256 end) pure returns (USM256 A) {
-    require(start <= end, "SolMat: start <= end");
-
-    uint256 len;
-
     unchecked {
-        len = end - start;
-    }
+        if (start > end) revert USM256_InvalidRange();
 
-    A = zeros(1, len);
+        uint256 numElements = end - start;
 
-    for (uint256 i; i < len; ++i) {
-        // XXX optimize
-        unchecked {
-            setIndex(A, i, start + i);
+        // We can unsafely allocate a new matrix,
+        // because we will write to all memory slots.
+        A = zerosUnsafe(1, numElements);
+
+        // Obtain a reference to matrix data location.
+        uint256 ptr = ref(A);
+
+        assembly {
+            let i
+            // Iterate over all elements.
+            for {} lt(i, numElements) {} {
+                // Store `i` at current pointer location.
+                mstore(ptr, add(start, i))
+                // Advance pointer to next slot.
+                ptr := add(ptr, 32)
+                i := add(i, 1)
+            }
         }
     }
 }
 
 function range(uint256 end) pure returns (USM256 A) {
-    A = zeros(1, end);
-
-    for (uint256 i; i < end; ++i) {
-        // XXX optimize
-        setIndex(A, i, i);
-    }
+    return range(0, end);
 }
 
 function reshape(USM256 A, uint256 nNew, uint256 mNew) pure returns (USM256 out) {
-    (uint256 n, uint256 m, uint256 data,) = header(A);
-
     unchecked {
-        require(n * m == nNew * mNew, "SolMat: invalid dimensions");
-    }
+        (uint256 n, uint256 m, uint256 data) = header(A);
 
-    out = USM256Header(data, nNew, mNew);
-}
+        if (n * m != nNew * mNew) revert USM256_InvalidDimensions();
 
-/* ------------- conversions ------------- */
-
-/// @dev `data` needs to be contiguous in memory.
-function from(uint8[3][4] memory data) pure returns (USM256 A) {
-    uint256 ptr;
-
-    assembly {
-        // Making a big assumption here that `data` uint8[3] entries
-        // are laid out contiguously in memory right after the pointers.
-        ptr := mload(data)
-    }
-
-    A = USM256Header(ptr, 4, 3);
-}
-
-function from(uint8[3][3] memory data) pure returns (USM256 A) {
-    uint256 ptr;
-
-    assembly {
-        ptr := mload(data)
-    }
-
-    A = USM256Header(ptr, 3, 3);
-}
-
-/// @dev todo: compare gas costs to manual copy
-function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (USM256 A) {
-    uint256 size;
-    assembly {
-        // XXX
-        size := mul(DATA_CHUNK_SIZE, mul(n, m))
-    }
-
-    uint256 AData = _alloc(size);
-
-    assembly {
-        // Use address(4) precompile to copy memory data `dataBytes` to `AData`.
-        pop(staticcall(gas(), 4, add(0x20, dataBytes), mload(dataBytes), AData, size))
-    }
-
-    A = USM256Header(AData, n, m);
-}
-
-function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (USM256 A) {
-    unchecked {
-        require(dataBytes.length <= (n * m * DATA_CHUNK_SIZE), "SolMat: too large");
-    }
-
-    uint256 AData;
-
-    assembly {
-        AData := add(0x20, dataBytes) // Skip length encoding.
-    }
-
-    A = USM256Header(AData, n, m);
-}
-
-function toBytes(USM256 A) view returns (bytes memory newData) {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
-
-    assembly {
-        let size := mul(sz, mul(n, m))
-        newData := mload(0x40)
-
-        // Update free memory pointer.
-        // Round up to next multiple of 32 bytes.
-        mstore(0x40, add(data, and(add(size, 0x1f), not(0x1f))))
-
-        // Use address(4) precompile to copy memory data `dataBytes` to `newData`.
-        pop(staticcall(gas(), 4, data, size, add(newData, 0x20), size))
-        mstore(newData, size)
+        out = USM256Header(data, nNew, mNew);
     }
 }
-
-function copy(USM256 A) view returns (USM256 out) {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
-
-    uint256 size;
-
-    assembly {
-        size := mul(sz, mul(n, m))
-    }
-
-    uint256 newData = _alloc(size);
-
-    assembly {
-        // Use address(4) precompile to copy memory data `dataBytes` to `newData`.
-        pop(staticcall(gas(), 4, data, size, newData, size))
-    }
-
-    out = USM256Header(newData, n, m);
-}
-
-// function zeros(uint256 n, uint256 m)  pure returns (USM256 A) {
-//     uint256 data;
-//     uint256 size = DATA_CHUNK_SIZE; // Hardcoding for now.
-//     // note: loading does not take into acc diff sizes
-
-//     assembly {
-//         A := mload(0x40)
-//         data := add(0x20, A)
-
-//         // Store meta data.
-//         let len := mul(n, m)
-//         let meta :=
-//             or(
-//                 or(
-//                     shl(mul(3, META_DATA_BITS), size), // data chunk size
-//                     shl(mul(2, META_DATA_BITS), data) // data location
-//                 ),
-//                 or(shl(META_DATA_BITS, m), n) // shape
-//             )
-
-//         mstore(A, meta)
-
-//         // Update free memory pointer.
-//         // Round up to next multiple of 32 bytes.
-//         // mstore(0x40, add(data, and(add(mul(size, len), 0x1f), not(0x1f))))
-//         mstore(0x40, add(data, mul(size, len)))
-//     }
-
-//     require((data | n | m) <= MAX_24_BITS, "SolMat: too large");
-// }
 
 /* ------------- indexing ------------- */
 
 function atIndex(USM256 A, uint256 index) pure returns (uint256 el) {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
-
     unchecked {
-        require(index < n * m, "SolMat: out of bounds");
-    }
+        (uint256 n, uint256 m, uint256 data) = header(A);
 
-    assembly {
-        let loc := add(data, mul(sz, index))
-        el := mload(loc)
+        if (index >= n * m) revert USM256_IndexOutOfBounds();
 
-        // Clean the bits by shifting by `32 - (32 >> scale)) * 8`.
-        let shft := shl(3, sub(32, sz))
-        el := shr(shft, shl(shft, el))
-    }
-}
-
-function at(USM256 A, uint256 i, uint256 j) pure returns (uint256 el) {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
-
-    require(i < n && j < m, "SolMat: out of bounds");
-
-    assembly {
-        let loc := add(data, mul(sz, add(mul(i, m), j)))
-        el := mload(loc)
+        assembly {
+            let loc := add(data, mul(32, index))
+            el := mload(loc)
+        }
     }
 }
 
 function setIndex(USM256 A, uint256 index, uint256 value) pure {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
-
     unchecked {
-        require(index < n * m, "SolMat: out of bounds");
+        (uint256 n, uint256 m, uint256 data) = header(A);
+
+        if (index >= n * m) revert USM256_IndexOutOfBounds();
+
+        assembly {
+            let loc := add(data, mul(32, index))
+            mstore(loc, value)
+        }
     }
+}
+
+function at(USM256 A, uint256 i, uint256 j) pure returns (uint256 el) {
+    (uint256 n, uint256 m, uint256 data) = header(A);
+
+    if (i >= n || j >= m) revert USM256_IndexOutOfBounds();
 
     assembly {
-        let loc := add(data, mul(sz, index))
-        mstore(loc, value)
+        let loc := add(data, mul(32, add(mul(i, m), j)))
+        el := mload(loc)
     }
 }
 
 function set(USM256 A, uint256 i, uint256 j, uint256 value) pure {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+    (uint256 n, uint256 m, uint256 data) = header(A);
 
-    require(i < n && j < m, "SolMat: out of bounds");
+    if (i >= n || j >= m) revert USM256_IndexOutOfBounds();
 
     assembly {
-        let loc := add(data, mul(sz, add(mul(i, m), j)))
+        let loc := add(data, mul(32, add(mul(i, m), j)))
         mstore(loc, value)
     }
 }
 
 /* ------------- functions ------------- */
 
-function addScalar(USM256 A, uint256 a) pure returns (USM256 C) {
-    (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
+function addScalar(USM256 A, uint256 s) pure returns (USM256 C) {
+    (uint256 n, uint256 m, uint256 data) = header(A);
 
-    C = zeros(An, Am);
-    uint256 Cdata = ref(C);
+    C = zerosUnsafe(n, m);
 
-    assembly {
-        let i
-        for {} lt(i, An) {} {
-            let j
-            for {} lt(j, Am) {} {
-                let el1 := mload(add(Adata, mul(Asz, add(mul(i, Am), j))))
-                let s := add(el1, a)
+    uint256 dataC = ref(C);
 
-                mstore(add(Cdata, mul(Asz, add(mul(i, Am), j))), s)
+    unchecked {
+        uint256 idx;
+        uint256 end = n * m * 32;
 
-                j := add(1, j)
+        while (idx != end) {
+            assembly {
+                let a := mload(add(data, idx))
+                let c := add(a, s)
+
+                mstore(add(dataC, idx), c)
             }
 
-            i := add(1, i)
+            idx = idx + 32;
         }
     }
 }
 
-function mul(USM256 A, uint256 a) pure returns (USM256 C) {
-    (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
+function mulScalar(USM256 A, uint256 s) pure returns (USM256 C) {
+    (uint256 n, uint256 m, uint256 data) = header(A);
 
-    C = zeros(An, Am);
-    uint256 Cdata = ref(C);
+    C = zerosUnsafe(n, m);
 
-    assembly {
-        let i
-        for {} lt(i, An) {} {
-            let j
-            for {} lt(j, Am) {} {
-                let el := mload(add(Adata, mul(Asz, add(mul(i, Am), j))))
-                let pr := mul(el, a)
+    uint256 dataC = ref(C);
 
-                mstore(add(Cdata, mul(Asz, add(mul(i, Am), j))), pr)
+    unchecked {
+        uint256 idx;
+        uint256 end = n * m * 32;
 
-                j := add(1, j)
+        while (idx != end) {
+            assembly {
+                let a := mload(add(data, idx))
+                let c := mul(a, s)
+
+                mstore(add(dataC, idx), c)
             }
 
-            i := add(1, i)
+            idx = idx + 32;
         }
     }
 }
 
 function add(USM256 A, USM256 B) pure returns (USM256 C) {
-    (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
-    (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = header(B);
+    (uint256 nA, uint256 mA, uint256 dataA) = header(A);
+    (uint256 nB, uint256 mB, uint256 dataB) = header(B);
 
-    require(An == Bn && Am == Bm, "SolMat: invalid dimensions");
-    require(Asz == Bsz, "SolMat: invalid size");
+    if (nA != nB || mA != mB) revert USM256_IncompatibleDimensions();
 
-    C = zeros(An, Am);
-    uint256 Cdata = ref(C);
+    C = zerosUnsafe(nA, mA);
 
-    assembly {
-        let i
-        for {} lt(i, An) {} {
-            let j
-            for {} lt(j, Am) {} {
-                let el1 := mload(add(Adata, mul(Asz, add(mul(i, Am), j))))
-                let el2 := mload(add(Bdata, mul(Bsz, add(mul(i, Bm), j))))
+    uint256 dataC = ref(C);
 
-                let s := add(el1, el2)
+    unchecked {
+        uint256 idx;
+        uint256 end = nA * mA * 32;
 
-                mstore(add(Cdata, mul(Asz, add(mul(i, Am), j))), s)
+        while (idx != end) {
+            assembly {
+                let a := mload(add(dataA, idx))
+                let b := mload(add(dataB, idx))
+                let c := add(a, b)
 
-                j := add(1, j)
+                mstore(add(dataC, idx), c)
             }
 
-            i := add(1, i)
+            idx = idx + 32;
         }
     }
 }
 
 function dot(USM256 A, USM256 B) pure returns (USM256 C) {
-    (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
-    (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = header(B);
+    (uint256 nA, uint256 mA, uint256 dataA) = header(A);
+    (uint256 nB, uint256 mB, uint256 dataB) = header(B);
 
-    require(Am == Bn, "SolMat: invalid dimensions");
-    require(Asz == Bsz, "SolMat: invalid size");
+    if (mA != nB) revert USM256_IncompatibleDimensions();
 
-    C = zeros(An, Bm);
-    uint256 Cdata = ref(C);
+    C = zerosUnsafe(nA, mB);
 
-    assembly {
-        let i
-        for {} lt(i, An) {} {
-            let j
-            for {} lt(j, Bm) {} {
-                let k
-                let d
-                for {} lt(k, Am) {} {
-                    let el1 := mload(add(Adata, mul(Asz, add(mul(i, Am), k))))
-                    let el2 := mload(add(Bdata, mul(Bsz, add(mul(k, Bm), j))))
+    uint256 dataC = ref(C);
 
-                    d := add(d, mul(el1, el2))
-                    k := add(1, k)
+    // assembly {
+    //     let i
+    //     for {} lt(i, nA) {} {
+    //         let j
+    //         for {} lt(j, mB) {} {
+    //             let k
+    //             let d
+    //             for {} lt(k, mA) {} {
+    //                 let el1 := mload(add(dataA, mul(32, add(mul(i, mA), k))))
+    //                 let el2 := mload(add(dataB, mul(32, add(mul(k, mB), j))))
+
+    //                 d := add(d, mul(el1, el2))
+    //                 k := add(1, k)
+    //             }
+    //             mstore(add(dataC, mul(32, add(mul(i, mB), j))), d)
+
+    //             j := add(1, j)
+    //         }
+
+    //         i := add(1, i)
+    //     }
+    // }
+
+    unchecked {
+        // Perform the matrix multiplication given by:
+        // `C_ij = A_ik B_kj`
+        //
+        // Given `i`, `j`, `k`, the offsets
+        // of the elements in `A`, `B` to be summed are:
+        // `idxA = 32 * (k + i * mA)`
+        // `idxB = 32 * (j + k * mb)`
+
+        uint256 idxC;
+        uint256 idxAStart;
+
+        for (uint256 i; i < nA; ++i) {
+            uint256 idxBStart;
+
+            for (uint256 j; j < mB; ++j) {
+                uint256 idxA = idxAStart;
+                uint256 idxB = idxBStart;
+
+                // Perform the dot product on the current
+                // row vector of `A` and the column vector of `B`.
+                // Store the result in `c`.
+                uint256 c;
+
+                for (uint256 k; k < mA; ++k) {
+                    assembly {
+                        let a := mload(add(dataA, idxA))
+                        let b := mload(add(dataB, idxB))
+
+                        c := add(c, mul(a, b))
+                    }
+
+                    idxA = idxA + 32; // The next element is in the next column of `A`.
+                    idxB = idxB + 32 * mB; // The next element of `B` is in the row below.
                 }
-                // @note what size does this end up?
-                mstore(add(Cdata, mul(Asz, add(mul(i, Bm), j))), d)
 
-                j := add(1, j)
+                assembly {
+                    mstore(add(dataC, idxC), c)
+                }
+
+                idxC = idxC + 32; // Iterate over the elements of `C`.
+                idxBStart = idxBStart + 32; // Start at the next column of `B`.
             }
 
-            i := add(1, i)
+            idxAStart = idxAStart + 32 * mA; // Jump to the next row of `A`.
+        }
+    }
+
+    // unchecked {
+    //     uint256 idxC;
+    //     uint256 idxAStart;
+
+    //     for (uint256 i; i < nA; ++i) {
+    //         // idxA = 32 * (k + i * mA)
+    //         // idxB = 32 * (j + k * mb)
+
+    //         // uint256 idxAStart = 32 * i * mA;
+    //         uint256 idxBStart;
+
+    //         for (uint256 j; j < mB; ++j) {
+    //             uint256 idxA = idxAStart;
+    //             uint256 idxB = idxBStart;
+
+    //             // Perform the dot product on the current
+    //             // row vector of `A` and the column vector of `B`.
+    //             // Store the result in `c`.
+    //             uint256 c;
+
+    //             for (uint256 k; k < mA; ++k) {
+    //                 assembly {
+    //                     let a := mload(add(dataA, idxA))
+    //                     let b := mload(add(dataB, idxB))
+
+    //                     c := add(c, mul(a, b))
+    //                 }
+
+    //                 idxA = idxA + 32; // The next element is in the next column of `A`.
+    //                 idxB = idxB + 32 * mB; // The next element of `B` is in the row below.
+    //             }
+
+    //             assembly {
+    //                 mstore(add(dataC, idxC), c)
+    //             }
+
+    //             idxC = idxC + 32; // Iterate over the elements of `C`.
+    //             idxBStart = idxBStart + 32; // Start at the next column of `B`.
+    //         }
+
+    //         idxAStart = idxAStart + 32 * mA; // Jump to the next row of `A`.
+    //     }
+    // }
+}
+
+function sum(USM256 A) pure returns (uint256 res) {
+    unchecked {
+        (uint256 n, uint256 m, uint256 data) = header(A);
+
+        for (uint256 i; i < n; ++i) {
+            for (uint256 j; j < m; ++j) {
+                assembly {
+                    let loc := add(data, mul(32, add(mul(i, m), j)))
+                    res := add(res, mload(loc))
+                }
+            }
         }
     }
 }
 
 function eqScalar(USM256 A, uint256 value) pure returns (bool equals) {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+    (uint256 n, uint256 m, uint256 data) = header(A);
 
     equals = true;
 
@@ -555,8 +554,10 @@ function eqScalar(USM256 A, uint256 value) pure returns (bool equals) {
         for (uint256 i; i < n && equals; ++i) {
             for (uint256 j; j < m && equals; ++j) {
                 assembly {
-                    let loc := add(data, mul(sz, add(mul(i, m), j)))
-                    equals := eq(mload(loc), value)
+                    let loc := add(data, mul(32, add(mul(i, m), j)))
+                    let el := mload(loc)
+
+                    equals := eq(el, value)
                 }
             }
         }
@@ -567,21 +568,21 @@ function eqScalar(USM256 A, uint256 value) pure returns (bool equals) {
 function eq(USM256 A, USM256 B) pure returns (bool equals) {
     if (USM256.unwrap(A) == USM256.unwrap(B)) return true;
 
-    (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = header(A);
-    (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = header(B);
+    (uint256 nA, uint256 mA, uint256 dataA) = header(A);
+    (uint256 Bn, uint256 Bm, uint256 Bdata) = header(B);
 
-    // require(An == Bn && Am == Bm, "SolMat: invalid dimensions");
+    // require(nA == Bn && mA == Bm, "SolMat: invalid dimensions");
     // require(Asz == Bsz, "SolMat: invalid size");
 
-    equals = An == Bn && Am == Bm;
+    equals = nA == Bn && mA == Bm;
 
     assembly {
         let i
-        for {} lt(i, An) {} {
+        for {} lt(i, nA) {} {
             let j
-            for {} lt(j, Am) {} {
-                let el1 := mload(add(Adata, mul(Asz, add(mul(i, Am), j))))
-                let el2 := mload(add(Bdata, mul(Bsz, add(mul(i, Bm), j))))
+            for {} lt(j, mA) {} {
+                let el1 := mload(add(dataA, mul(32, add(mul(i, mA), j))))
+                let el2 := mload(add(Bdata, mul(32, add(mul(i, Bm), j))))
 
                 equals := eq(el1, el2)
 
@@ -597,17 +598,98 @@ function eq(USM256 A, USM256 B) pure returns (bool equals) {
     }
 }
 
-function sum(USM256 A) pure returns (uint256 res) {
-    (uint256 n, uint256 m, uint256 data, uint256 sz) = header(A);
+/* ------------- conversions ------------- */
 
+function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (USM256 A) {
     unchecked {
-        for (uint256 i; i < n; ++i) {
-            for (uint256 j; j < m; ++j) {
-                assembly {
-                    let loc := add(data, mul(sz, add(mul(i, m), j)))
-                    res := add(res, mload(loc))
-                }
-            }
+        if (n * m * 32 > dataBytes.length) revert USM256_TooLarge();
+
+        uint256 dataA;
+
+        assembly {
+            // Actual data is located after length encoding.
+            dataA := add(32, dataBytes)
         }
+
+        A = USM256Header(dataA, n, m);
     }
+}
+
+function _bytes(USM256 A) pure returns (bytes memory dataBytes) {
+    uint256 data = ref(A);
+
+    assembly {
+        // This only works under the assumption that
+        // we always store the size in bytes before the data.
+        dataBytes := sub(data, 32)
+    }
+}
+
+/// @dev todo: compare gas costs to manual copy
+function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (USM256 A) {
+    unchecked {
+        uint256 size = n * m * 32;
+        uint256 dataA = malloc(32 + size);
+
+        assembly {
+            // Store bytes size.
+            mstore(dataA, size)
+            // Actual data will be stored in next mem slot.
+            dataA := add(dataA, 32)
+            // Use address(4) precompile to copy memory data `dataBytes` to `dataA`.
+            pop(staticcall(gas(), 4, add(32, dataBytes), mload(dataBytes), dataA, size))
+        }
+
+        A = USM256Header(dataA, n, m);
+    }
+}
+
+function copy(USM256 A) view returns (USM256 B) {
+    unchecked {
+        (uint256 n, uint256 m, uint256 data) = header(A);
+
+        uint256 size = n * m * 32;
+        uint256 dataB = malloc(32 + size);
+
+        assembly {
+            // Store bytes size.
+            mstore(dataB, size)
+            // Actual data will be stored in next mem slot.
+            dataB := add(dataB, 32)
+            // Use address(4) precompile to copy memory data `dataBytes` to `dataB`.
+            pop(staticcall(gas(), 4, data, size, dataB, size))
+        }
+
+        B = USM256Header(dataB, n, m);
+    }
+}
+
+/* ------------- unsafe conversions ------------- */
+
+/// @dev `data` needs to be contiguous in memory.
+function fromUnsafe_(uint8[3][4] memory data) pure returns (USM256 A) {
+    uint256 ptr;
+
+    assembly {
+        // Making a big assumption here that `data` uint8[3] entries
+        // are laid out contiguously in memory right after the pointers.
+        ptr := mload(data)
+        // Store data bytes length in position `ptr - 32`.
+        // This allows to easily retrieve the underlying data as bytes,
+        // but "destroys" the original `uint8[3][4] memory data` and
+        // it should not be used afterwards.
+        mstore(sub(ptr, 32), 384)
+    }
+
+    A = USM256Header(ptr, 4, 3);
+}
+
+function fromUnsafe_(uint8[3][3] memory data) pure returns (USM256 A) {
+    uint256 ptr;
+
+    assembly {
+        ptr := mload(data)
+    }
+
+    A = USM256Header(ptr, 3, 3);
 }

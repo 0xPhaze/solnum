@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "src/SN32x32.sol";
 import "src/SM32x32.sol";
+import "src/USM256.sol";
 
 import "forge-std/Test.sol";
 
@@ -124,6 +125,47 @@ contract TestHelper is Test {
         }
     }
 
+    /* ------------- USM256 ------------- */
+
+    function assertEq(USM256 A, uint256 s) internal {
+        if (!A.eqScalar(s)) {
+            emit log("Error: A == B not satisfied [USM256]");
+            emit log_named_uint("  Expected", s);
+            emit log("    Actual");
+            logMat(A);
+            fail();
+        }
+    }
+
+    function assertEq(USM256 A, USM256 B) internal {
+        if (!A.eq(B)) {
+            emit log("Error: A == B not satisfied [USM256]");
+            emit log("  Expected");
+            logMat(B);
+            emit log("    Actual");
+            logMat(A);
+            fail();
+        }
+    }
+
+    function assertNEq(USM256 A, USM256 B) internal {
+        if (A.eq(B)) {
+            emit log("Error: A != B not satisfied [USM256]");
+            logMat(B);
+            fail();
+        }
+    }
+
+    function assertIsEye(USM256 A) internal {
+        (uint256 n, uint256 m) = A.shape();
+
+        for (uint256 i; i < n; ++i) {
+            for (uint256 j; j < m; ++j) {
+                assertEq(A.at(i, j), (i == j) ? 1 : 0);
+            }
+        }
+    }
+
     /* ------------- SM32x32 ------------- */
 
     function assertEq(SM32x32 a, uint256 v) internal {
@@ -165,10 +207,40 @@ contract TestHelper is Test {
         }
     }
 
+    function setFreeMemPtr(uint256 loc) internal pure {
+        assembly {
+            mstore(0x40, loc)
+        }
+    }
+
     function freeMemPtr() internal pure returns (uint256 memPtr) {
         assembly {
             memPtr := mload(0x40)
         }
+    }
+
+    bytes32 constant _MAGIC_VALUE = 0x2bdba7ddf640d8dba63497f8f2088af9fa01709eb45d239463a00082e9ccf36f;
+
+    function storeMagicValueAt(uint256 loc) internal pure {
+        assembly {
+            mstore(loc, _MAGIC_VALUE)
+        }
+    }
+
+    function mload(uint256 loc) internal pure returns (bytes32 value) {
+        assembly {
+            value := mload(loc)
+        }
+    }
+
+    function assertMagicValueAt(uint256 loc) internal {
+        bytes32 value;
+
+        assembly {
+            value := mload(loc)
+        }
+
+        assertEq(value, _MAGIC_VALUE, "Magic Value not found");
     }
 
     /* ------------- log ------------- */
@@ -181,7 +253,26 @@ contract TestHelper is Test {
         console.logBytes32(data);
     }
 
-    function logMat(SM32x32 A) public {
+    function logMat(USM256 A) internal {
+        (uint256 n, uint256 m) = A.shape();
+
+        string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
+
+        uint256 max = 10;
+
+        for (uint256 i; i < n && i < max; ++i) {
+            for (uint256 j; j < m && j < max; ++j) {
+                if (i == max - 1) str = string.concat(str, "..\t");
+                else str = string.concat(str, string.concat(vm.toString(A.at(i, j)), " \t"));
+                if (j == max - 1) str = string.concat(str, "..");
+            }
+            str = string.concat(str, "\n");
+        }
+
+        emit log(str);
+    }
+
+    function logMat(SM32x32 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
         string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");

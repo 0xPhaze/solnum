@@ -4,289 +4,324 @@ pragma solidity ^0.8.0;
 import "src/USM256.sol";
 import "./TestHelper.sol";
 
-contract TestSolMat is TestHelper {
-    uint8[3][4] MAT43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
+contract TestUSM256 is TestHelper {
+    // uint8[0][1] MATRIX_10;
+    uint8[3][3] MATRIX_33 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+    uint8[3][4] MATRIX_43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
+
+    USM256 memSafeTestMat;
 
     /* ------------- header ------------- */
 
     function test_header(uint64 data, uint24 n, uint24 m) public {
         USM256 A = USM256Header(data, n, m);
+        (uint256 nA, uint256 mA, uint256 dataA) = A.header();
 
-        (uint256 hn, uint256 hm, uint256 hdata,) = A.header();
+        assertEq(nA, n);
+        assertEq(mA, m);
+        assertEq(dataA, data);
 
-        assertEq(hn, n);
-        assertEq(hm, m);
-        assertEq(hdata, data);
+        (nA, mA) = A.shape();
 
-        (hn, hm) = A.shape();
+        assertEq(nA, n);
+        assertEq(mA, m);
 
-        assertEq(hn, n);
-        assertEq(hm, m);
+        (nA, mA) = (A.dim0(), A.dim1());
 
-        (hn, hm) = (A.dim0(), A.diA());
+        assertEq(nA, n);
+        assertEq(mA, m);
 
-        assertEq(hn, n);
-        assertEq(hm, m);
-
-        uint256 len = A.length();
-        uint256 dataRef = A.ref();
-        uint256 sizeB = A.sizeBytes();
-
-        assertEq(len, uint256(n) * uint256(m));
-        assertEq(dataRef, data);
-        assertEq(sizeB, uint256(n) * uint256(m) * 32);
+        assertEq(A.ref(), data);
+        assertEq(A.length(), uint256(n) * uint256(m));
+        assertEq(A.sizeBytes(), uint256(n) * uint256(m) * 32);
     }
 
-    // /* ------------- alloc ------------- */
+    /* ------------- malloc ------------- */
 
-    // function test_alloc(uint8 sz) public {
-    //     uint256 size = (uint256(sz) + 31) / 32 * 32;
-    //     uint256 memPtr = freeMemPtr();
+    function test_malloc(uint256 sz) public {
+        sz = bound(sz, 0, 50);
 
-    //     uint256 ptr = _alloc(sz);
+        uint256 memPtr = freeMemPtr();
+        uint256 size = sz * 32;
+        uint256 ptr = malloc(size);
 
-    //     assertEq(freeMemPtr() - memPtr, size);
-    //     assertEq(ptr, memPtr);
-    // }
+        assertEq(freeMemPtr() - memPtr, size);
+        assertEq(ptr, memPtr);
+    }
 
-    // function test_alloc(uint8 n, uint8 m) public {
-    //     uint256 size = uint256(n) * uint256(m) * 32;
-    //     uint256 memPtr = freeMemPtr();
+    /* ------------- constructors ------------- */
 
-    //     uint256 ptr = _alloc(n, m);
+    function test_zeros(uint256 n, uint256 m) public {
+        n = bound(n, 0, 10);
+        m = bound(m, 0, 10);
 
-    //     assertEq(freeMemPtr() - memPtr, size);
-    //     assertEq(ptr, memPtr);
-    // }
+        uint256 memPtr = freeMemPtr();
+        uint256 size = n * m * 32;
+        USM256 A = zeros(n, m);
 
-    // function test_alloc(uint8 n, uint8 m, uint8 scale) public {
-    //     uint256 size = (uint256(n) * uint256(m) * uint256(32 >> scale) + 31) / 32 * 32;
-    //     uint256 memPtr = freeMemPtr();
+        assertEq(freeMemPtr() - memPtr, size + 32);
+        assertEq(A.ref(), memPtr + 32);
 
-    //     uint256 ptr = _alloc(n, m, scale);
+        (uint256 nA, uint256 mA, uint256 dataA) = A.header();
 
-    //     assertEq(freeMemPtr() - memPtr, size);
-    //     assertEq(ptr, memPtr);
-    // }
+        assertEq(A, 0);
+        assertEq(nA, n);
+        assertEq(mA, m);
+        assertEq(dataA, memPtr + 32);
+    }
 
-    // /* ------------- constructors ------------- */
+    function test_eye() public {
+        USM256 A = eye(3, 3);
 
-    // function test_zeros(uint8 n, uint8 m) public {
-    //     USM256 A = zeros(n, m);
+        assertIsEye(A);
+    }
 
-    //     assertEq(A, 0);
+    function test_ones(uint256 n, uint256 m) public {
+        n = bound(n, 0, 10);
+        m = bound(m, 0, 10);
 
-    //     // if (n * m != 0) {
-    //     //     A.set(111 % n, 333 % m, 1);
-    //     //     assertFalse(A.eq(0));
-    //     // }
-    // }
+        USM256 A = ones(n, m);
 
-    // function test_eye() public {
-    //     USM256 A = eye(3, 3);
+        assertEq(A, 1);
+    }
 
-    //     assertIsEye(A);
-    // }
+    /* ------------- set ------------- */
 
-    // function test_ones() public {
-    //     USM256 A = ones(3, 4);
+    function test_set(uint256 n, uint256 m, uint256[10][3] calldata data) public {
+        n = bound(n, 1, 10);
+        m = bound(m, 1, 10);
 
-    //     assertTrue(A.eq(1));
-    // }
+        USM256 A = zeros(n, m);
 
-    // /* ------------- set ------------- */
+        uint256[10][10] memory B;
 
-    // function test_set(uint256 n, uint256 m, uint8[3] calldata i, uint8[3] calldata j, uint8[3] calldata v) public {
-    //     n = bound(n, 1, 10);
-    //     m = bound(m, 1, 10);
+        // Store data at random positions.
+        // Apply the same changes to `B`.
+        for (uint256 k; k < data.length; k++) {
+            uint256 i = data[k][0] % n;
+            uint256 j = data[k][1] % m;
+            uint256 v = data[k][2];
 
-    //     USM256 A = zeros(n, m);
+            B[i][j] = v;
 
-    //     A.set(i[0] % n, j[0] % m, v[0]);
-    //     assertEq(A.at(i[0] % n, j[0] % m), v[0]);
+            A.set(i, j, v);
+        }
 
-    //     A.set(i[1] % n, j[1] % m, v[1]);
-    //     assertEq(A.at(i[1] % n, j[1] % m), v[1]);
+        // Make sure these values can be retrieved again.
+        for (uint256 k; k < data.length; k++) {
+            uint256 i = data[k][0] % n;
+            uint256 j = data[k][1] % m;
 
-    //     A.set(i[2] % n, j[2] % m, v[2]);
-    //     assertEq(A.at(i[2] % n, j[2] % m), v[2]);
-    // }
+            assertEq(A.at(i, j), B[i][j]);
+        }
+    }
 
-    // function test_range() public {
-    //     USM256 A = range(1, 13);
+    function test_range(uint256 n, uint256 start, uint256 len) public {
+        n = bound(n, 1, 10);
+        len = bound(len, 0, 50);
+        start = bound(start, 0, 100_000);
 
-    //     for (uint256 i; i < 12; i++) {
-    //         assertEq(A.at(i), 1 + i);
-    //     }
-    // }
+        USM256 A = range(start, start + len);
 
-    // function test_reshape() public {
-    //     USM256 A = range(1, 13);
-    //     USM256 B = from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+        for (uint256 i; i < len; i++) {
+            assertEq(A.atIndex(i), start + i);
+        }
+    }
 
-    //     assertEq(A.reshape(4, 3), B);
-    //     assertNEq(A.reshape(3, 4), B);
+    function test_reshape() public {
+        USM256 A = range(1, 13);
+        USM256 B = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
-    //     // todo: test negative cases
-    // }
+        assertEq(A.reshape(4, 3), B);
+        assertNEq(A.reshape(3, 4), B);
+    }
 
-    // // function test_xxx() public view {
-    // //     for (uint256 i; i < 6; i++) {
-    // //         console.log("%s: %s (%s)", i, 32 >> i, (32 - (32 >> i)) * 8);
-    // //     }
-    // // }
+    /* ------------- conversions ------------- */
 
-    // function test_scale() public {
-    //     USM256 A = range(0, 10);
-    //     USM256 B = USM256Header(A.ref(), 1, 10, 1);
+    function test_from() public {
+        USM256 A = fromUnsafe_(MATRIX_43);
+        (uint256 n, uint256 m) = (4, 3);
 
-    //     for (uint256 i; i < 10; i++) {
-    //         assertEq(B.at(i), i % 2 == 0 ? (1 + i) / 2 : 0);
-    //     }
-    // }
+        for (uint256 i; i < n; ++i) {
+            for (uint256 j; j < m; ++j) {
+                assertEq(A.at(i, j), MATRIX_43[i][j]);
+            }
+        }
 
-    // /* ------------- conversions ------------- */
+        (uint256 nA, uint256 mA, uint256 dataA) = A.header();
 
-    // function test_from() public {
-    //     USM256 A = from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+        assertEq(nA, n);
+        assertEq(mA, m);
+        assertTrue(dataA != 0);
+    }
 
-    //     (uint256 n, uint256 m) = (4, 3);
+    function test_from_bytes() public {
+        USM256 A = fromUnsafe_(MATRIX_43);
+        USM256 B = from_(abi.encode(MATRIX_43), 4, 3);
 
-    //     for (uint256 i; i < n; ++i) {
-    //         for (uint256 j; j < m; ++j) {
-    //             assertEq(A.at(i, j), MAT43[i][j]);
-    //         }
-    //     }
+        (uint256 nA, uint256 mA, uint256 dataA) = A.header();
+        (uint256 nB, uint256 mB, uint256 dataB) = B.header();
 
-    //     (uint256 hn, uint256 hm, uint256 hdata, uint256 hsz) = A.header();
+        assertEq(A, B);
+        assertEq(nA, nB);
+        assertEq(mA, mB);
+        assertTrue(dataA != 0);
+        assertTrue(dataB != 0);
+        assertTrue(dataA != dataB);
+    }
 
-    //     assertEq(hn, n);
-    //     assertEq(hm, m);
-    //     assertEq(hsz, 32);
-    //     assertTrue(hdata != 0);
-    // }
+    function test_toBytes() public {
+        USM256 A = fromUnsafe_(MATRIX_43);
+        USM256 B = from_(A._bytes(), 4, 3);
 
-    // function test_from_bytes() public {
-    //     USM256 A = from(MAT43);
-    //     USM256 B = from_(abi.encode(MAT43), 4, 3);
+        // The header data should actually be equal now,
+        // because we're referencing the same underlying data.
+        assertEq(B._bytes().length, 4 * 3 * 32);
+        assertEq(USM256.unwrap(A), USM256.unwrap(B));
+    }
 
-    //     (uint256 An, uint256 Am, uint256 Adata, uint256 Asz) = A.header();
-    //     (uint256 Bn, uint256 Bm, uint256 Bdata, uint256 Bsz) = B.header();
+    function test_copy() public {
+        USM256 A = fromUnsafe_(MATRIX_43);
+        USM256 B = A.copy();
 
-    //     assertEq(An, Bn);
-    //     assertEq(Am, Bm);
-    //     assertEq(Asz, Bsz);
+        assertEq(A, B);
+        assertTrue(A.ref() != B.ref());
+    }
 
-    //     assertEq(A, B);
+    /* ------------- functions ------------- */
 
-    //     assertTrue(Adata != 0);
-    //     assertTrue(Bdata != 0);
-    //     assertTrue(Adata != Bdata);
-    // }
+    function test_eq() public {
+        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        USM256 B = A.copy();
 
-    // function test_toBytes() public {
-    //     USM256 A = from(MAT43);
-    //     USM256 B = from_(A.toBytes(), 4, 3);
+        assertEq(A, B);
 
-    //     assertEq(A, B);
-    //     assertTrue(A.ref() != B.ref());
-    // }
+        A.set(0, 0, 9);
+        assertFalse(A.eq(B));
 
-    // function test_copy() public {
-    //     USM256 A = from(MAT43);
-    //     USM256 B = A.copy();
+        B.set(0, 0, 9);
+        assertEq(A, B);
+    }
 
-    //     assertEq(A, B);
-    //     assertTrue(A.ref() != B.ref());
-    // }
+    function test_sum() public {
+        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
-    // /* ------------- functions ------------- */
+        assertEq(A.sum(), 45);
+    }
 
-    // function test_eq() public {
-    //     USM256 A = from_(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 3, 3);
-    //     USM256 B = A.copy();
+    function test_addScalar() public {
+        USM256 A = range(1, 10);
 
-    //     assertEq(A, B);
+        assertEq(A.addScalar(1), range(2, 11));
+        assertEq(A.addScalar(10), range(11, 20));
+    }
 
-    //     A.set(0, 0, 9);
-    //     assertFalse(A.eq(B));
+    function test_mulScalar() public {
+        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        USM256 B = fromUnsafe_([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
 
-    //     B.set(0, 0, 9);
-    //     assertEq(A, B);
-    // }
+        assertEq(A.mulScalar(2), B);
+    }
 
-    // function test_dot() public {
-    //     USM256 A = from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     USM256 B = from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-    //     USM256 C = from([[14, 14, 14], [32, 32, 32], [50, 50, 50]]);
+    function test_dot() public {
+        USM256 A = fromUnsafe_([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        USM256 B = fromUnsafe_([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        USM256 C = fromUnsafe_([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
-    //     assertEq(A.dot(B), C);
-    //     assertNEq(B.dot(A), C);
-    // }
+        assertEq(A.dot(B), C);
+        assertNEq(B.dot(A), C);
+    }
 
-    // function test_mul() public {
-    //     USM256 A = from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     USM256 B = from([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
+    function test_add() public {
+        USM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        USM256 B = fromUnsafe_([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+        USM256 C = fromUnsafe_([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
 
-    //     assertEq(A.mul(2), B);
-    // }
+        assertEq(A.add(B), C);
+        assertEq(A.add(zeros(3, 3)), A);
+    }
 
-    // function test_add() public {
-    //     USM256 A = from([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     USM256 B = from([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-    //     USM256 C = from([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
+    /* ------------- performance ------------- */
 
-    //     assertEq(A.add(B), C);
-    //     assertEq(A.add(zeros(3, 3)), A);
-    // }
+    function test__perf_range_1024() public pure {
+        range(1024);
+    }
 
-    // function test_add_scalar() public {
-    //     USM256 A = range(1, 10);
+    function test__perf_addScalar_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
 
-    //     assertEq(A.add(1), range(2, 11));
-    //     assertEq(A.add(10), range(11, 20));
-    // }
+        A.addScalar(1);
+    }
 
-    // /* ------------- performance ------------- */
+    function test__perf_mulScalar_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
 
-    // // function test__perf_dot_128() public pure {
-    // //     USM256 A = eye(128, 128);
-    // //     USM256 B = eye(128, 128);
+        A.mulScalar(1);
+    }
 
-    // //     A.dot(B);
-    // // }
+    function test__perf_add_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
+        USM256 B = zerosUnsafe(128, 128);
 
-    // // function test__perf_dot_128_x2() public {
-    // //     USM256 A = eye(128, 128, 1);
-    // //     USM256 B = eye(128, 128, 1);
+        A.add(B);
+    }
 
-    // //     // A.dot(B);
+    function test__perf_dot_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
+        USM256 B = zerosUnsafe(128, 128);
 
-    // //     assertEq(A.dot(B), A);
-    // // }
+        A.dot(B);
+    }
 
-    // function test_half_prec() public {
-    //     USM256 A = eye(5, 5, 1);
-    //     USM256 B = eye(5, 5, 1);
+    function test__perf_sum_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
 
-    //     assertEq(A.dot(B), A);
-    // }
+        A.sum();
+    }
 
-    // function test_range_half() public {
-    //     USM256 A = range(1, 13);
+    function test__perf_eq_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
+        USM256 B = zerosUnsafe(128, 128);
 
-    //     for (uint256 i; i < 12; i++) {
-    //         assertEq(A.at(i), 1 + i);
-    //     }
-    // }
+        A.eq(B);
+    }
 
-    // function test_reshape_half() public {
-    //     USM256 A = range(1, 13);
-    //     USM256 B = from([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+    /* ------------- memory safety ------------- */
 
-    //     assertEq(A.reshape(4, 3), B);
-    //     assertNEq(A.reshape(3, 4), B);
+    modifier testMemorySafe(USM256 A) {
+        memSafeTestMat = A;
 
-    //     // todo: test negative cases
+        uint256 loc1 = freeMemPtr();
+        // Skip magic valaue at `loc1`.
+        // Skip matrix bytes length encoding.
+        // Skip matrix data encoding.
+        uint256 loc2 = loc1 + 32 + (1 + A.length()) * 32;
+
+        storeMagicValueAt(loc1);
+        storeMagicValueAt(loc2);
+
+        // Set the free memory pointer to after the first magic value.
+        setFreeMemPtr(loc1 + 32);
+
+        _;
+
+        // Make sure both magic values can be safely retrieved.
+        bytes32 v1 = mload(loc1);
+        bytes32 v2 = mload(loc2);
+
+        assertEq(v1, _MAGIC_VALUE, "Magic Value not found");
+        assertEq(v2, _MAGIC_VALUE, "Magic Value not found");
+    }
+
+    function test_addScalar_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+        memSafeTestMat.addScalar(1);
+    }
+
+    function test_mulScalar_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+        memSafeTestMat.mulScalar(1);
+    }
+
+    // function test_add_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+    //     memSafeTestMat.add(1);
     // }
 }

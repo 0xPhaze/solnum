@@ -44,13 +44,13 @@ using SM32x32Lib for SM32x32;
 //     //     assertEq(sizeBytes, uint256(n) * uint256(m) * size);
 //     // }
 
-//     // /* ------------- alloc ------------- */
+//     // /* ------------- malloc ------------- */
 
 //     // function test_alloc(uint8 sz) public {
 //     //     uint256 size = (uint256(sz) + 31) / 32 * 32;
 //     //     uint256 memPtr = freeMemPtr();
 
-//     //     uint256 ptr = SolMat._alloc(sz);
+//     //     uint256 ptr = SolMat.malloc(sz);
 
 //     //     assertEq(freeMemPtr() - memPtr, size);
 //     //     assertEq(ptr, memPtr);
@@ -60,7 +60,7 @@ using SM32x32Lib for SM32x32;
 //     //     uint256 size = uint256(n) * uint256(m) * 32;
 //     //     uint256 memPtr = freeMemPtr();
 
-//     //     uint256 ptr = SolMat._alloc(n, m);
+//     //     uint256 ptr = SolMat.malloc(n, m);
 
 //     //     assertEq(freeMemPtr() - memPtr, size);
 //     //     assertEq(ptr, memPtr);
@@ -70,7 +70,7 @@ using SM32x32Lib for SM32x32;
 //     //     uint256 size = (uint256(n) * uint256(m) * uint256(32 >> scale) + 31) / 32 * 32;
 //     //     uint256 memPtr = freeMemPtr();
 
-//     //     uint256 ptr = SolMat._alloc(n, m, scale);
+//     //     uint256 ptr = SolMat.malloc(n, m, scale);
 
 //     //     assertEq(freeMemPtr() - memPtr, size);
 //     //     assertEq(ptr, memPtr);

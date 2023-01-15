@@ -3,7 +3,8 @@ solc = "0.8.17"
 # optimizer = false
 # optimizer_runs = 0
 optimizer = true
-optimizer_runs = 1000_000
+optimizer_runs = 1_000
+# optimizer_runs = 1000_000
 # bytecode_hash = "none"
 
 fs_permissions = [{ access = "read-write", path = "./" }]
