@@ -203,23 +203,10 @@ contract TestM32x32 is TestHelper {
     //     assertTrue(A.ref() != B.ref());
     // }
 
-    // /* ------------- functions ------------- */
-
-    // function test_eq() public {
-    //     M32x32 A = range(1, 5);
-    //     M32x32 B = range(1, 5);
-
-    //     assertEq(A, B);
-    // }
+    /* ------------- functions ------------- */
 
     function test_eq() public {
-        M32x32 A = from_(
-            abi.encodePacked(
-                uint64(1), uint64(2), uint64(3), uint64(4), uint64(5), uint64(6), uint64(7), uint64(8), uint64(9)
-            ),
-            3,
-            3
-        );
+        M32x32 A = range(1, 10).reshape(3, 3);
         M32x32 B = A.copy();
 
         assertEq(A, B);
@@ -229,16 +216,26 @@ contract TestM32x32 is TestHelper {
 
         A.set(0, 2, 3);
         assertEq(A, B);
+
+        A = range(8);
+
+        // Write over dirty data.
+        setFreeMemPtr(A.ref());
+        assertEq(ones(1, 5), ones(1, 5));
+
+        setFreeMemPtr(A.ref());
+        assertEq(ones(1, 6), ones(1, 6));
+
+        setFreeMemPtr(A.ref());
+        assertEq(ones(1, 7), ones(1, 7));
     }
 
     function test_sum() public {
-        M32x32 A = range(1, 9).reshape(2, 4);
-
-        assertEq(A.sum(), 36);
-
-        A = range(1, 10).reshape(3, 3);
-
-        assertEq(A.sum(), 45);
+        assertEq(range(1, 9).sum(), 36);
+        assertEq(range(1, 10).sum(), 45);
+        assertEq(range(1, 11).sum(), 55);
+        assertEq(range(1, 12).sum(), 66);
+        assertEq(range(1, 10).reshape(3, 3).sum(), 45);
     }
 
     // function test_addScalar() public {
@@ -273,12 +270,18 @@ contract TestM32x32 is TestHelper {
     //     assertEq(A.add(zeros(3, 3)), A);
     // }
 
-    // function test_eqScalar() public {
-    //     M32x32 A = range(1, 10);
+    function test_eqScalar() public {
+        M32x32 A;
 
-    //     assertFalse(A.eqScalar(0));
-    //     // assertTrue(A.mulScalar(0).eqScalar(0));
-    // }
+        for (uint256 i = 1; i < 12; i++) {
+            A = ones(1, i);
+            A.setUnsafe(0, int256(i), 0x1337);
+            assertEq(A, 1);
+
+            A.set(0, i - 1, 0x1337);
+            assertFalse(A.eqScalar(1));
+        }
+    }
 
     // /* ------------- performance ------------- */
 
@@ -310,13 +313,13 @@ contract TestM32x32 is TestHelper {
     //     A.mulScalar(1);
     // }
 
-    // function test__perf_eqScalar_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
+    function test__perf_eqScalar_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
 
-    //     A.set(100, 100, 3);
+        A.set(100, 100, 3);
 
-    //     A.eqScalar(1);
-    // }
+        A.eqScalar(1);
+    }
 
     // function test__perf_add_128() public pure {
     //     M32x32 A = zerosUnsafe(128, 128);
@@ -332,11 +335,11 @@ contract TestM32x32 is TestHelper {
     //     A.dot(B);
     // }
 
-    // function test__perf_sum_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
+    function test__perf_sum_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
 
-    //     A.sum();
-    // }
+        A.sum();
+    }
 
     // function test__perf_eq_128() public pure {
     //     M32x32 A = zerosUnsafe(128, 128);

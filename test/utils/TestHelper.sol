@@ -166,31 +166,31 @@ contract TestHelper is Test {
 
     /* ------------- M32x32 ------------- */
 
-    function assertEq(M32x32 a, uint256 v) internal {
-        if (!a.eqScalar(v)) {
-            emit log("Error: a == b not satisfied [M32x32]");
+    function assertEq(M32x32 A, uint256 v) internal {
+        if (!A.eqScalar(v)) {
+            emit log("Error: A == b not satisfied [M32x32]");
             emit log_named_uint("  Expected", v);
             emit log("    Actual");
-            logMat(a);
+            logMat(A);
             fail();
         }
     }
 
-    function assertEq(M32x32 a, M32x32 b) internal {
-        if (!a.eq(b)) {
-            emit log("Error: a == b not satisfied [M32x32]");
+    function assertEq(M32x32 A, M32x32 B) internal {
+        if (!A.eq(B)) {
+            emit log("Error: A == B not satisfied [M32x32]");
             emit log("  Expected");
-            logMat(b);
+            logMat(B);
             emit log("    Actual");
-            logMat(a);
+            logMat(A);
             fail();
         }
     }
 
-    function assertNEq(M32x32 a, M32x32 b) internal {
-        if (a.eq(b)) {
-            emit log("Error: a != b not satisfied [M32x32]");
-            logMat(b);
+    function assertNEq(M32x32 A, M32x32 B) internal {
+        if (A.eq(B)) {
+            emit log("Error: A != B not satisfied [M32x32]");
+            logMat(B);
             fail();
         }
     }
@@ -323,15 +323,23 @@ contract TestHelper is Test {
 
     //     emit log(str);
 
+    function mdump(uint256 location) internal view {
+        mdump(location, 1);
+    }
+
     function mdump(uint256 location, uint256 numSlots) internal view {
         bytes32 m;
+
         for (uint256 i; i < numSlots; i++) {
             assembly {
                 m := mload(add(location, mul(0x20, i)))
             }
-            console.logBytes2(bytes2(uint16(location + 0x20 * i)));
-            console.logBytes32(m);
+
+            console.log(
+                string.concat(vm.toString(abi.encodePacked(bytes2(uint16(location + 0x20 * i)))), ": ", vm.toString(m))
+            );
         }
+
         console.log();
     }
 }

@@ -21,6 +21,7 @@ using {
     at,
     atIndex,
     set,
+    setUnsafe,
     setIndex,
     add,
     addScalar,
@@ -240,7 +241,7 @@ function range(uint256 start, uint256 end) pure returns (M32x32 A) {
         uint256 aEnd = a + ((numEl + 3) & ~uint256(3));
 
         while (a != aEnd) {
-            uint256 word = ((a + 0) << 192) | ((a + 1) << 128) | ((a + 2) << 64) | (a + 3);
+            uint256 word = packWordUnsafe(a, a + 1, a + 2, a + 3);
 
             assembly {
                 mstore(ptr, word) // Store `a` at current pointer location.
@@ -320,6 +321,20 @@ function set(M32x32 A, uint256 i, uint256 j, uint256 value) pure {
         if (i >= n || j >= m) revert M32x32_IndexOutOfBounds();
 
         ptr = ptr + 8 * (i * m + j - 3);
+
+        assembly {
+            let word := and(mload(ptr), not(MAX_64_BITS))
+
+            mstore(ptr, or(value, word))
+        }
+    }
+}
+
+function setUnsafe(M32x32 A, int256 i, int256 j, uint256 value) pure {
+    unchecked {
+        (, uint256 m, uint256 ptr) = header(A);
+
+        ptr = ptr + 8 * (uint256(i) * m + uint256(j) - 3);
 
         assembly {
             let word := and(mload(ptr), not(MAX_64_BITS))
@@ -440,25 +455,45 @@ function eq(M32x32 A, M32x32 B) pure returns (bool equals) {
     unchecked {
         if (M32x32.unwrap(A) == M32x32.unwrap(B)) return true;
 
-        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         equals = nA == nB && mA == mB;
 
-        uint256 ptr;
-        uint256 end = nA * mA * 8 + 31 & ~(uint256(31));
+        uint256 size = nA * mA * 8;
+        // Up until here we can load & parse full words.
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = ptrA + size - endA;
 
-        // NOTE: this works, but only for multiples of 4, fix.
-        // TODO: FIX
-        while (ptr != end && equals) {
+        // Loop over 32 byte words.
+        while (ptrA != endA && equals) {
             assembly {
-                let a := mload(add(dataPtrA, ptr))
-                let b := mload(add(dataPtrB, ptr))
+                let a := mload(ptrA)
+                let b := mload(ptrB)
 
                 equals := eq(a, b)
             }
 
-            ptr = ptr + 32;
+            ptrA = ptrA + 32;
+            ptrB = ptrB + 32;
+        }
+
+        uint256 wordA;
+        uint256 wordB;
+
+        assembly {
+            wordA := mload(ptrA)
+            wordB := mload(ptrB)
+        }
+
+        // Parse the last remaining word in chunks of 8 bytes.
+        while (rest != 0) {
+            uint256 a = (wordA >> ((32 - rest) * 8)) & MAX_64_BITS;
+            uint256 b = (wordB >> ((32 - rest) * 8)) & MAX_64_BITS;
+
+            equals = equals && (a == b);
+            rest = rest - 8;
         }
     }
 }
@@ -519,25 +554,39 @@ function sum(M32x32 A) pure returns (uint256 s) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        uint256 ptrA = ptr;
-        uint256 endA = ptrA + (n * m * 8 + 31 & ~uint256(31));
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words.
+        uint256 end = ptr + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = ptr + size - end;
 
-        while (ptrA != endA) {
+        // Loop over 32 byte words.
+        while (ptr != end) {
             assembly {
-                // let word := and(mload(ptr), not(MAX_64_BITS))
+                let word := mload(ptr)
 
-                // mstore(ptr, or(value, word))
-
-                let word := mload(ptrA)
-
-                // FIX
+                // Add each chunk together.
                 s := add(s, and(word, MAX_64_BITS))
                 s := add(s, and(shr(64, word), MAX_64_BITS))
                 s := add(s, and(shr(128, word), MAX_64_BITS))
-                s := add(s, and(shr(192, word), MAX_64_BITS))
+                s := add(s, shr(192, word))
             }
 
-            ptrA = ptrA + 32;
+            ptr = ptr + 32;
+        }
+
+        uint256 word;
+
+        assembly {
+            word := mload(ptr)
+        }
+
+        // Parse the last remaining word in chunks of 8 bytes.
+        while (rest != 0) {
+            uint256 a = (word >> ((32 - rest) * 8)) & MAX_64_BITS;
+
+            s = s + a;
+            rest = rest - 8;
         }
     }
 }
@@ -546,19 +595,41 @@ function eqScalar(M32x32 A, uint256 value) pure returns (bool equals) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words.
+        uint256 end = ptr + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = ptr + size - end;
+        // Pack value in one word for efficiency.
+        uint256 valueX4 = packWordUnsafe(value, value, value, value);
+
         equals = true;
 
-        uint256 ptrA = ptr;
-        uint256 endA = ptrA + n * m * 32;
-
-        while (ptrA != endA) {
+        // Loop over 32 byte words.
+        while (ptr != end) {
             assembly {
-                equals := eq(mload(ptrA), value)
+                let a := mload(ptr)
+
+                equals := eq(a, valueX4)
             }
 
             if (!equals) break;
 
-            ptrA = ptrA + 32;
+            ptr = ptr + 32;
+        }
+
+        uint256 word;
+
+        assembly {
+            word := mload(ptr)
+        }
+
+        // Parse the last remaining word in chunks of 8 bytes.
+        while (rest != 0) {
+            uint256 a = (word >> ((32 - rest) * 8)) & MAX_64_BITS;
+
+            equals = equals && (a == value);
+            rest = rest - 8;
         }
     }
 }
@@ -622,7 +693,7 @@ function copy(M32x32 A) view returns (M32x32 B) {
             mstore(ptrB, size)
             // Actual data will be stored in next mem slot.
             ptrB := add(ptrB, 32)
-            // Use `address(4)` precompile to copy memory data `dataBytes` to `ptrB`.
+            // Use `address(4)` precompile to copy memory data `ptrA` to `ptrB`.
             pop(staticcall(gas(), 4, ptrA, size, ptrB, size))
         }
 
@@ -659,3 +730,7 @@ function copy(M32x32 A) view returns (M32x32 B) {
 
 //     A = M32x32Header(ptr, 3, 3);
 // }
+
+function packWordUnsafe(uint256 a, uint256 b, uint256 c, uint256 d) pure returns (uint256 word) {
+    word = (a << 192) | (b << 128) | (c << 64) | d;
+}

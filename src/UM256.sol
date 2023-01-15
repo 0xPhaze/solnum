@@ -427,23 +427,22 @@ function eq(UM256 A, UM256 B) pure returns (bool equals) {
     unchecked {
         if (UM256.unwrap(A) == UM256.unwrap(B)) return true;
 
-        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         equals = nA == nB && mA == mB;
+        uint256 endA = ptrA + nA * mA * 32;
 
-        uint256 ptr;
-        uint256 end = nA * mA * 32;
-
-        while (ptr != end && equals) {
+        while (ptrA != endA && equals) {
             assembly {
-                let a := mload(add(dataPtrA, ptr))
-                let b := mload(add(dataPtrB, ptr))
+                let a := mload(ptrA)
+                let b := mload(ptrB)
 
                 equals := eq(a, b)
             }
 
-            ptr = ptr + 32;
+            ptrA = ptrA + 32;
+            ptrB = ptrB + 32;
         }
     }
 }
@@ -598,7 +597,7 @@ function copy(UM256 A) view returns (UM256 B) {
             mstore(ptrB, size)
             // Actual data will be stored in next mem slot.
             ptrB := add(ptrB, 32)
-            // Use `address(4)` precompile to copy memory data `dataBytes` to `ptrB`.
+            // Use `address(4)` precompile to copy memory data `ptrA` to `ptrB`.
             pop(staticcall(gas(), 4, ptrA, size, ptrB, size))
         }
 
