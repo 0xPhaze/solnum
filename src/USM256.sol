@@ -379,22 +379,24 @@ function dot(USM256 A, USM256 B) pure returns (USM256 C) {
 
         C = zerosUnsafe(nA, mB);
 
-        uint256 dataPtrC = ref(C);
+        uint256 ptrC = ref(C);
 
-        uint256 ptrC;
         uint256 ptrARowSize = 32 * mA;
         uint256 ptrBRowSize = 32 * mB;
 
-        uint256 ptrALastRow = dataPtrA + 32 * nA * mA;
+        uint256 ptrARowEnd = dataPtrA + 32 * nA * mA;
         uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
 
+        uint256 ptrBColEnd = dataPtrB + ptrBRowSize;
+        uint256 ptrBCol;
+
         // Loop over `C`s `i` indices.
-        while (ptrARow != ptrALastRow) {
+        while (ptrARow != ptrARowEnd) {
             // i-loop start.
 
-            uint256 ptrBCol = 0;
+            ptrBCol = dataPtrB;
 
-            while (ptrBCol != ptrBRowSize) {
+            while (ptrBCol != ptrBColEnd) {
                 // j-loop start.
 
                 uint256 ptrB = ptrBCol;
@@ -411,7 +413,7 @@ function dot(USM256 A, USM256 B) pure returns (USM256 C) {
 
                     assembly {
                         let a := mload(ptrA) // Load A[i,k].
-                        let b := mload(add(dataPtrB, ptrB)) // Load B[k,j].
+                        let b := mload(ptrB) // Load B[k,j].
 
                         c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
                     }
@@ -421,7 +423,7 @@ function dot(USM256 A, USM256 B) pure returns (USM256 C) {
                 }
 
                 assembly {
-                    mstore(add(dataPtrC, ptrC), c) // Store the result in C[i,j].
+                    mstore(ptrC, c) // Store the result in C[i,j].
                 }
 
                 ptrC = ptrC + 32; // Advance to the next element of `C`.
