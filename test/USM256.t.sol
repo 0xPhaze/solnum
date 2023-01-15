@@ -241,6 +241,13 @@ contract TestUSM256 is TestHelper {
         assertEq(A.add(zeros(3, 3)), A);
     }
 
+    function test_eqScalar() public {
+        USM256 A = range(1, 10);
+
+        assertFalse(A.eqScalar(0));
+        assertTrue(A.mulScalar(0).eqScalar(0));
+    }
+
     /* ------------- performance ------------- */
 
     function test__perf_range_1024() public pure {
@@ -257,6 +264,14 @@ contract TestUSM256 is TestHelper {
         USM256 A = zerosUnsafe(128, 128);
 
         A.mulScalar(1);
+    }
+
+    function test__perf_eqScalar_128() public pure {
+        USM256 A = zerosUnsafe(128, 128);
+
+        A.set(100, 100, 3);
+
+        A.eqScalar(1);
     }
 
     function test__perf_add_128() public pure {
