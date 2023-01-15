@@ -254,6 +254,18 @@ contract TestUSM256 is TestHelper {
         range(1024);
     }
 
+    function test__perf_zeros_128() public pure {
+        zeros(128, 128);
+    }
+
+    function test__perf_ones_128() public pure {
+        ones(128, 128);
+    }
+
+    function test__perf_eye_128() public pure {
+        eye(128, 128);
+    }
+
     function test__perf_addScalar_128() public pure {
         USM256 A = zerosUnsafe(128, 128);
 
