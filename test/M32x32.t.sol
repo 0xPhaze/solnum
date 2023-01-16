@@ -373,31 +373,31 @@ contract TestM32x32 is TestHelper {
     }
 
     function test__perf_addScalar_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
 
         A.addScalar(1);
     }
 
     // function test__perf_mulScalar_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
+    //     M32x32 A = mallocM32x32(128, 128);
 
     //     A.mulScalar(1);
     // }
 
     function test__perf_addScalarUnchecked_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
 
         A.addScalarUnchecked(1);
     }
 
     function test__perf_mulScalarUnchecked_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
 
         A.mulScalarUnchecked(1);
     }
 
     function test__perf_eqScalar_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
 
         A.set(100, 100, 3);
 
@@ -405,34 +405,34 @@ contract TestM32x32 is TestHelper {
     }
 
     function test__perf_add_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
-        M32x32 B = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
+        M32x32 B = mallocM32x32(128, 128);
 
         A.add(B);
     }
 
     // function test__perf_dot_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
-    //     M32x32 B = zerosUnsafe(128, 128);
+    //     M32x32 A = mallocM32x32(128, 128);
+    //     M32x32 B = mallocM32x32(128, 128);
 
     //     A.dot(B);
     // }
 
     function test__perf_sum_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
 
         A.sum();
     }
 
     function test__perf_eq_128() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
-        M32x32 B = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
+        M32x32 B = mallocM32x32(128, 128);
 
         A.eq(B);
     }
 
     function test__perf_fill_1024() public pure {
-        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 A = mallocM32x32(128, 128);
 
         A.fill_(1);
     }

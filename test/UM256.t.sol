@@ -245,8 +245,8 @@ contract TestUM256 is TestHelper {
         UM256 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
         UM256 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
-        assertEq(A.dot(B), C);
-        assertNEq(B.dot(A), C);
+        assertEq(A.dotTransposed(B), C);
+        assertNEq(B.dotTransposed(A), C);
     }
 
     function test_add() public {
@@ -284,19 +284,19 @@ contract TestUM256 is TestHelper {
     }
 
     function test__perf_addScalarUnchecked_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
 
         A.addScalarUnchecked(1);
     }
 
     function test__perf_mulScalarUnchecked_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
 
         A.mulScalarUnchecked(1);
     }
 
     function test__perf_eqScalar_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
 
         A.set(100, 100, 3);
 
@@ -304,34 +304,41 @@ contract TestUM256 is TestHelper {
     }
 
     function test__perf_add_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
-        UM256 B = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
+        UM256 B = mallocUM256(128, 128);
 
         A.add(B);
     }
 
     function test__perf_dot_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
-        UM256 B = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
+        UM256 B = mallocUM256(128, 128);
 
         A.dot(B);
     }
 
+    function test__perf_dotTransposed_128() public pure {
+        UM256 A = mallocUM256(128, 128);
+        UM256 B = mallocUM256(128, 128);
+
+        A.dotTransposed(B);
+    }
+
     function test__perf_sum_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
 
         A.sum();
     }
 
     function test__perf_eq_128() public pure {
-        UM256 A = zerosUnsafe(128, 128);
-        UM256 B = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
+        UM256 B = mallocUM256(128, 128);
 
         A.eq(B);
     }
 
     function test__perf_fill_1024() public pure {
-        UM256 A = zerosUnsafe(128, 128);
+        UM256 A = mallocUM256(128, 128);
 
         A.fill_(1);
     }

@@ -118,7 +118,7 @@ function ref(M32x32 A) pure returns (uint256 ptr) {
 
 /* ------------- constructors ------------- */
 
-function zerosUnsafe(uint256 n, uint256 m) pure returns (M32x32 A) {
+function mallocM32x32(uint256 n, uint256 m) pure returns (M32x32 A) {
     unchecked {
         // Memory size in bytes.
         uint256 size = n * m * 8;
@@ -139,20 +139,17 @@ function zerosUnsafe(uint256 n, uint256 m) pure returns (M32x32 A) {
 }
 
 function zeros(uint256 n, uint256 m) pure returns (M32x32 C) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m); // Allocate memory for matrix.
 
-    // Fill matrix with `0`.
+    // Fill matrix with `0`s.
     fill_(C, 0);
 }
 
 function ones(uint256 n, uint256 m) pure returns (M32x32 C) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    C = zerosUnsafe(n, m);
+    // Allocate memory for matrix.
+    C = mallocM32x32(n, m);
 
-    // Fill matrix with `1`.
+    // Fill matrix with `1`s.
     fill_(C, 1);
 }
 
@@ -161,11 +158,10 @@ function eye(uint256 n, uint256 m) pure returns (M32x32 C) {
         // Only allowing square dimensions.
         if (n != m) revert M32x32_InvalidDimensions();
 
-        // We can unsafely allocate a new matrix,
-        // because we will write to all memory slots.
-        C = zerosUnsafe(n, m);
+        // Allocate memory for matrix.
+        C = mallocM32x32(n, m);
 
-        // Fill matrix with `0`.
+        // Fill matrix with `0`s.
         fill_(C, 0);
 
         // Obtain a pointer to matrix data location.
@@ -198,9 +194,8 @@ function range(uint256 start, uint256 end) pure returns (M32x32 C) {
 
         uint256 numEl = end - start;
 
-        // We can unsafely allocate a new matrix,
-        // because we will write to all memory slots.
-        C = zerosUnsafe(1, numEl);
+        // Allocate memory for matrix.
+        C = mallocM32x32(1, numEl);
 
         // Obtain a pointer to matrix data location.
         // Offset pointer to the left by 3 chunks so that
@@ -320,7 +315,7 @@ function addUnchecked(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m);
 
     // Add scalar `A` and `B`, store result in `C`.
     addUncheckedTo_(A, B, C);
@@ -377,7 +372,7 @@ function add(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m);
 
     // Add scalar `A` and `B`, store result in `C`.
     addTo_(A, B, C);
@@ -459,7 +454,7 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
         if (mA != nB) revert M32x32_IncompatibleDimensions();
 
-        C = zerosUnsafe(nA, mB);
+        C = mallocM32x32(nA, mB);
 
         uint256 ptrC = ref(C);
 
@@ -606,7 +601,7 @@ function addScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m);
 
     // Add scalar `s` to `A`, store result in `C`.
     addScalarUncheckedTo_(A, s, C);
@@ -616,7 +611,7 @@ function addScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m);
 
     // Add scalar `s` to `A`, store result in `C`.
     addScalarTo_(A, s, C);
@@ -730,7 +725,7 @@ function mulScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m);
 
     // Multiply `A` with scalar `s`, store result in `C`.
     mulScalarUncheckedTo_(A, s, C);
@@ -740,7 +735,7 @@ function mulScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m);
 
     // Multiply `A` with scalar `s`, store result in `C`.
     mulScalarTo_(A, s, C);
@@ -936,9 +931,7 @@ function eqScalar(M32x32 A, uint256 value) pure returns (bool equals) {
 }
 
 function full(uint256 n, uint256 m, uint256 s) pure returns (M32x32 C) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    C = zerosUnsafe(n, m);
+    C = mallocM32x32(n, m); // Allocate memory for matrix.
 
     fill_(C, s); // Fill matrix with `s`.
 }
@@ -1031,8 +1024,7 @@ function copy(M32x32 A) view returns (M32x32 C) {
 /* ------------- conversions ------------- */
 
 function fromArray(uint8[3][3] memory data) pure returns (M32x32 C) {
-    // Allocate new matrix of the same dimensions.
-    C = zerosUnsafe(3, 3);
+    C = mallocM32x32(3, 3); // Allocate new matrix of the same dimensions.
 
     uint256 ptr;
 
@@ -1053,7 +1045,7 @@ function fromArray(uint8[4][2] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
-    copyFromUint256PtrToUnsafe_(ptr, 2, 4, C = zerosUnsafe(2, 4));
+    copyFromUint256PtrToUnsafe_(ptr, 2, 4, C = mallocM32x32(2, 4));
 }
 
 function fromArray(uint8[4][4] memory data) pure returns (M32x32 C) {
@@ -1063,7 +1055,7 @@ function fromArray(uint8[4][4] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
-    copyFromUint256PtrToUnsafe_(ptr, 4, 4, C = zerosUnsafe(4, 4));
+    copyFromUint256PtrToUnsafe_(ptr, 4, 4, C = mallocM32x32(4, 4));
 }
 
 function fromArray(uint256[2][2] memory data) pure returns (M32x32 C) {
@@ -1073,7 +1065,7 @@ function fromArray(uint256[2][2] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
-    copyFromUint256PtrToUnsafe_(ptr, 2, 2, C = zerosUnsafe(2, 2));
+    copyFromUint256PtrToUnsafe_(ptr, 2, 2, C = mallocM32x32(2, 2));
 }
 
 function copyFromUint256PtrToUnsafe_(uint256 ptr, uint256 n, uint256 m, M32x32 C) pure {

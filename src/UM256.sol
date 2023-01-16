@@ -25,6 +25,7 @@ using {
     mulScalarUnchecked,
     add,
     dot,
+    dotTransposed,
     eq,
     eqScalar,
     sum
@@ -128,11 +129,11 @@ function ref(UM256 A) pure returns (uint256 ptr) {
 
 /* ------------- constructors ------------- */
 
-function zerosUnsafe(uint256 n, uint256 m) pure returns (UM256 A) {
+function mallocUM256(uint256 n, uint256 m) pure returns (UM256 A) {
     unchecked {
         // Memory size in bytes.
         uint256 size = n * m * 32;
-        // Allocate memory space for matrix.
+        // Allocate memory for matrix.
         // Add 32 bytes to store the byte size.
         uint256 ptr = malloc(32 + size);
 
@@ -147,21 +148,15 @@ function zerosUnsafe(uint256 n, uint256 m) pure returns (UM256 A) {
 }
 
 function zeros(uint256 n, uint256 m) pure returns (UM256 C) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    C = zerosUnsafe(n, m);
+    C = mallocUM256(n, m); // Allocate memory for matrix.
 
-    // Fill matrix with `0`.
-    fill_(C, 0);
+    fill_(C, 0); // Fill matrix with `0`s.
 }
 
 function ones(uint256 n, uint256 m) pure returns (UM256 C) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    C = zerosUnsafe(n, m);
+    C = mallocUM256(n, m); // Allocate memory for matrix.
 
-    // Fill matrix with `1`.
-    fill_(C, 1);
+    fill_(C, 1); // Fill matrix with `1`s.
 }
 
 function eye(uint256 n, uint256 m) pure returns (UM256 C) {
@@ -169,9 +164,8 @@ function eye(uint256 n, uint256 m) pure returns (UM256 C) {
         // Only allowing square dimensions.
         if (n != m) revert UM256_InvalidDimensions();
 
-        // We can unsafely allocate a new matrix,
-        // because we will write to all memory slots.
-        C = zerosUnsafe(n, m);
+        // Allocate memory for matrix.
+        C = mallocUM256(n, m);
 
         // Fill matrix with `0`.
         fill_(C, 0);
@@ -200,9 +194,8 @@ function range(uint256 start, uint256 end) pure returns (UM256 A) {
 
         uint256 numEl = end - start;
 
-        // We can unsafely allocate a new matrix,
-        // because we will write to all memory slots.
-        A = zerosUnsafe(1, numEl);
+        // Allocate memory for matrix.
+        A = mallocUM256(1, numEl);
 
         // Obtain a pointer to matrix data location.
         uint256 ptr = ref(A);
@@ -302,7 +295,7 @@ function add(UM256 A, UM256 B) pure returns (UM256 C) {
 
         if (nA != nB || mA != mB) revert UM256_IncompatibleDimensions();
 
-        C = zerosUnsafe(nA, mA);
+        C = mallocUM256(nA, mA);
 
         // Loop over all `n * m` elements of 32 bytes size.
         uint256 endA = ptrA + nA * mA * 32;
@@ -340,7 +333,7 @@ function dot(UM256 A, UM256 B) pure returns (UM256 C) {
 
         if (mA != nB) revert UM256_IncompatibleDimensions();
 
-        C = zerosUnsafe(nA, mB);
+        C = mallocUM256(nA, mB);
 
         uint256 ptrC = ref(C);
 
@@ -405,9 +398,9 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
         (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
         (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
 
-        if (mA != nB) revert UM256_IncompatibleDimensions();
+        if (mA != mB) revert UM256_IncompatibleDimensions();
 
-        C = zerosUnsafe(nA, mB);
+        C = mallocUM256(nA, nB);
 
         uint256 ptrC = ref(C);
 
@@ -417,19 +410,19 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
         uint256 ptrARowEnd = dataPtrA + 32 * nA * mA;
         uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
 
-        uint256 ptrBColEnd = dataPtrB + ptrBRowSize;
-        uint256 ptrBCol;
+        uint256 ptrBRowEnd = dataPtrB + 32 * nB * mB;
+        uint256 ptrBRow;
 
         // Loop over `C`s `i` indices.
         while (ptrARow != ptrARowEnd) {
             // i-loop start.
 
-            ptrBCol = dataPtrB;
+            ptrBRow = dataPtrB;
 
-            while (ptrBCol != ptrBColEnd) {
+            while (ptrBRow != ptrBRowEnd) {
                 // j-loop start.
 
-                uint256 ptrB = ptrBCol;
+                uint256 ptrB = ptrBRow;
                 uint256 ptrA = ptrARow;
                 uint256 ptrAInnerEnd = ptrARow + ptrARowSize;
 
@@ -444,13 +437,13 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
 
                     assembly {
                         let a := mload(ptrA) // Load A[i,k].
-                        let b := mload(ptrB) // Load B[k,j].
+                        let b := mload(ptrB) // Load B[j,k].
 
                         c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
                     }
 
                     ptrA = ptrA + 32; // Loop over `A`s columns.
-                    ptrB = ptrB + ptrBRowSize; // Loop over `B`s rows.
+                    ptrB = ptrB + 32; // Loop over `B`s columns.
                 }
 
                 assembly {
@@ -458,7 +451,7 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
                 }
 
                 ptrC = ptrC + 32; // Advance to the next element of `C`.
-                ptrBCol = ptrBCol + 32; // Advance to the next column of `B`.
+                ptrBRow = ptrBRow + ptrBRowSize; // Advance to the next row of `B`.
             }
 
             ptrARow = ptrARow + ptrARowSize; // Advance to the next row of `A`.
@@ -500,7 +493,7 @@ function addScalarUnchecked(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
-        C = zerosUnsafe(n, m);
+        C = mallocUM256(n, m);
 
         // Loop over all `n * m` elements of 32 bytes size.
         uint256 endA = ptrA + n * m * 32;
@@ -525,7 +518,7 @@ function mulScalarUnchecked(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        C = zerosUnsafe(n, m);
+        C = mallocUM256(n, m);
 
         uint256 ptrA = ptr;
         uint256 endA = ptrA + n * m * 32;
@@ -588,9 +581,8 @@ function eqScalar(UM256 A, uint256 value) pure returns (bool equals) {
 }
 
 function full(uint256 n, uint256 m, uint256 s) pure returns (UM256 C) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    C = zerosUnsafe(n, m);
+    // Allocate memory for matrix.
+    C = mallocUM256(n, m);
 
     fill_(C, s); // Fill matrix with `s`.
 }
