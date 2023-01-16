@@ -399,6 +399,73 @@ function dot(UM256 A, UM256 B) pure returns (UM256 C) {
     }
 }
 
+/// @dev Computes `C_ij = A_ik B_jk`
+function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
+    unchecked {
+        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+
+        if (mA != nB) revert UM256_IncompatibleDimensions();
+
+        C = zerosUnsafe(nA, mB);
+
+        uint256 ptrC = ref(C);
+
+        uint256 ptrARowSize = 32 * mA;
+        uint256 ptrBRowSize = 32 * mB;
+
+        uint256 ptrARowEnd = dataPtrA + 32 * nA * mA;
+        uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
+
+        uint256 ptrBColEnd = dataPtrB + ptrBRowSize;
+        uint256 ptrBCol;
+
+        // Loop over `C`s `i` indices.
+        while (ptrARow != ptrARowEnd) {
+            // i-loop start.
+
+            ptrBCol = dataPtrB;
+
+            while (ptrBCol != ptrBColEnd) {
+                // j-loop start.
+
+                uint256 ptrB = ptrBCol;
+                uint256 ptrA = ptrARow;
+                uint256 ptrAInnerEnd = ptrARow + ptrARowSize;
+
+                // Perform the dot product on the current
+                // row vector of `A` and the column vector of `B`.
+                // Store the result in `c`.
+                uint256 c;
+
+                // Loop over 32 byte words.
+                while (ptrA != ptrAInnerEnd) {
+                    // k-loop start.
+
+                    assembly {
+                        let a := mload(ptrA) // Load A[i,k].
+                        let b := mload(ptrB) // Load B[k,j].
+
+                        c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
+                    }
+
+                    ptrA = ptrA + 32; // Loop over `A`s columns.
+                    ptrB = ptrB + ptrBRowSize; // Loop over `B`s rows.
+                }
+
+                assembly {
+                    mstore(ptrC, c) // Store the result in C[i,j].
+                }
+
+                ptrC = ptrC + 32; // Advance to the next element of `C`.
+                ptrBCol = ptrBCol + 32; // Advance to the next column of `B`.
+            }
+
+            ptrARow = ptrARow + ptrARowSize; // Advance to the next row of `A`.
+        }
+    }
+}
+
 function eq(UM256 A, UM256 B) pure returns (bool equals) {
     unchecked {
         if (UM256.unwrap(A) == UM256.unwrap(B)) return true;

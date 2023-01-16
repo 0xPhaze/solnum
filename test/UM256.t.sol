@@ -233,8 +233,17 @@ contract TestUM256 is TestHelper {
 
     function test_dot() public {
         UM256 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        UM256 B = fromArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
+        UM256 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+
+        assertEq(A.dot(B), C);
+        assertNEq(B.dot(A), C);
+    }
+
+    function test_dotTransposed() public {
+        UM256 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
         UM256 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-        UM256 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
+        UM256 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
         assertEq(A.dot(B), C);
         assertNEq(B.dot(A), C);
