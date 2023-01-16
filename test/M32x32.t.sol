@@ -236,22 +236,22 @@ contract TestM32x32 is TestHelper {
         assertEq(A.mulScalarUnchecked(s), s);
     }
 
-    // function test_dot() public {
-    //     // M32x32 A = range(1, 9).reshape(2, 4);
-    //     // M32x32 B = range(10, 18).reshape(4, 2);
-    //     // M32x32 C = fromArray([[uint256(130), 140], [uint256(322), 348]]);
+    function test_dot() public {
+        // M32x32 A = range(1, 9).reshape(2, 4);
+        // M32x32 B = range(10, 18).reshape(4, 2);
+        // M32x32 C = fromArray([[uint256(130), 140], [uint256(322), 348]]);
 
-    //     M32x32 A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-    //     M32x32 B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
-    //     M32x32 C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+        M32x32 A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        M32x32 B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
+        M32x32 C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
-    //     // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-    //     // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-    //     // M32x32 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
+        // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        // M32x32 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
-    //     assertEq(A.dot(B), C);
-    //     // assertNEq(B.dot(A), C);
-    // }
+        assertEq(A.dot(B), C);
+        // assertNEq(B.dot(A), C);
+    }
 
     function test_dotTransposed() public {
         // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
@@ -448,11 +448,18 @@ contract TestM32x32 is TestHelper {
         A.addUnchecked(B);
     }
 
-    function test__perf_dot_128() public pure {
+    function test__perf_dot_128() public {
         M32x32 A = mallocM32x32(128, 128);
         M32x32 B = mallocM32x32(128, 128);
 
         A.dot(B);
+    }
+
+    function test__perf_dotTransposed_128() public pure {
+        M32x32 A = mallocM32x32(128, 128);
+        M32x32 B = mallocM32x32(128, 128);
+
+        A.dotTransposed(B);
     }
 
     function test__perf_sum_128() public pure {
