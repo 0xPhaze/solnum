@@ -557,7 +557,9 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
         C = mallocM32x32(nA, nB);
 
-        uint256 ptrCij = ref(C);
+        // Offset pointer by 3 (of 4) 8 byte chunks.
+        // This way the loaded values will be right-aligned.
+        uint256 ptrCij = ref(C) - 24;
 
         uint256 ptrARowSize = 8 * mA;
         uint256 ptrBRowSize = 8 * mB;
@@ -592,31 +594,34 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                     // k-loop start.
 
                     assembly {
-                        let a := mload(ptrAik) // Load A[i,k].
-                        let b := mload(ptrBjk) // Load B[j,k].
+                        let aX4 := mload(ptrAik) // Load A[i,k].
+                        let bX4 := mload(ptrBjk) // Load B[j,k].
 
                         let s
-                        s := mul(and(a, _UINT64_MAX), and(b, _UINT64_MAX))
+                        s := mul(and(aX4, _UINT64_MAX), and(bX4, _UINT64_MAX))
                         c := add(c, s)
-                        s := mul(and(shr(64, a), _UINT64_MAX), and(shr(64, b), _UINT64_MAX))
+                        s := mul(and(shr(64, aX4), _UINT64_MAX), and(shr(64, bX4), _UINT64_MAX))
                         c := add(c, s)
-                        s := mul(and(shr(128, a), _UINT64_MAX), and(shr(128, b), _UINT64_MAX))
+                        s := mul(and(shr(128, aX4), _UINT64_MAX), and(shr(128, bX4), _UINT64_MAX))
                         c := add(c, s)
-                        s := mul(shr(192, a), shr(192, b))
+                        s := mul(shr(192, aX4), shr(192, bX4))
                         c := add(c, s)
 
                         // c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
                     }
 
-                    ptrAik = ptrAik + 32; // Loop over `A`s columns.
-                    ptrBjk = ptrBjk + 32; // Loop over `B`s columns.
+                    ptrAik = ptrAik + 32; // Advance to the next column of 32 byte words of `A`.
+                    ptrBjk = ptrBjk + 32; // Advance to the next column of 32 byte words of `B`.
                 }
 
                 assembly {
-                    mstore(ptrCij, c) // Store the result in C[i,j].
+                    // Preserve the previous data in memory.
+                    let word := and(mload(ptrCij), not(_UINT64_MAX))
+
+                    mstore(ptrCij, or(word, c)) // Store the result in C[i,j].
                 }
 
-                ptrCij = ptrCij + 32; // Advance to the next element of `C`.
+                ptrCij = ptrCij + 8; // Advance to the next element of `C`.
                 ptrBj = ptrBj + ptrBRowSize; // Advance to the next row of `B`.
             }
 

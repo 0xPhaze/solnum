@@ -443,8 +443,8 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
                         c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
                     }
 
-                    ptrAik = ptrAik + 32; // Loop over `A`s columns.
-                    ptrBjk = ptrBjk + 32; // Loop over `B`s columns.
+                    ptrAik = ptrAik + 32; // Advance to the next column of `A`.
+                    ptrBjk = ptrBjk + 32; // Advance to the next column of `B`.
                 }
 
                 assembly {
