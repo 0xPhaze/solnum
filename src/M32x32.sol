@@ -358,10 +358,9 @@ function addUncheckedTo_(M32x32 A, M32x32 B, M32x32 C) pure {
             assembly {
                 // Mask applies to leftover bits in word.
                 let mask := not(shr(mul(rest, 8), not(0)))
-                let a := mload(ptrA) // Load packed values from `A` at `ptrA`.
-                let b := mload(ptrB) // Load packed values from `B` at `ptrB`.
-                // Apply mask to clear out any unwanted right-aligned bits.
-                let c := add(and(a, mask), and(b, mask)) // Add packed values together.
+                let a := and(mload(ptrA), mask) // Load packed values from `A` at `ptrA`.
+                let b := and(mload(ptrB), mask) // Load packed values from `B` at `ptrB`.
+                let c := add(a, b) // Add packed values together.
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
             }
@@ -426,8 +425,7 @@ function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
                 let mask := not(shr(mul(rest, 8), not(0)))
                 let a := and(mload(ptrA), mask) // Load packed values from `A` at `ptrA`.
                 let b := and(mload(ptrB), mask) // Load packed values from `B` at `ptrB`.
-                // Apply mask to clear out any unwanted right-aligned bits.
-                let c := add(and(a, mask), and(b, mask)) // Add packed values together.
+                let c := add(a, b) // Add packed values together.
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
 
@@ -491,22 +489,13 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                     // k-loop start.
 
                     assembly {
-                        let a := mload(ptrAik) // Load A[i,k].
-                        let b := mload(ptrBkj) // Load B[k,j].
+                        let aX4 := mload(ptrAik) // Load packed A[i,k].
+                        let bX4 := mload(ptrBkj) // Load packed B[j,k].
 
-                        // c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
-
-                        let s
-                        s := mul(and(a, _UINT64_MAX), and(b, _UINT64_MAX))
-                        c := add(c, s)
-                        s := mul(and(shr(64, a), _UINT64_MAX), and(shr(64, b), _UINT64_MAX))
-                        c := add(c, s)
-                        s := mul(and(shr(128, a), _UINT64_MAX), and(shr(128, b), _UINT64_MAX))
-                        c := add(c, s)
-                        s := mul(shr(192, a), shr(192, b))
-                        c := add(c, s)
-
-                        // overflow := or(overflow, add(s, OVERFLOW_CHECK_INT64))
+                        c := add(c, mul(and(aX4, _UINT64_MAX), and(bX4, _UINT64_MAX)))
+                        c := add(c, mul(and(shr(64, aX4), _UINT64_MAX), and(shr(64, bX4), _UINT64_MAX)))
+                        c := add(c, mul(and(shr(128, aX4), _UINT64_MAX), and(shr(128, bX4), _UINT64_MAX)))
+                        c := add(c, mul(shr(192, aX4), shr(192, bX4)))
                     }
 
                     ptrAik = ptrAik + 32; // Advance to the next column of `A`.
@@ -582,7 +571,10 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 uint256 ptrBjk = ptrBj;
                 uint256 ptrAik = ptrAi;
                 // End inner loop after one row of `A`.
-                uint256 ptrAikEnd = ptrAi + ptrARowSize;
+                // Up until here we can load & parse full words.
+                uint256 ptrAikEnd = ptrAi + (ptrARowSize & ~uint256(31));
+                // The rest needs to be parsed individually.
+                uint256 ptrAikRest = ptrAi + ptrARowSize - ptrAikEnd;
 
                 // Perform the dot product on the current
                 // row vector of `A` and the column vector of `B`.
@@ -594,24 +586,31 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                     // k-loop start.
 
                     assembly {
-                        let aX4 := mload(ptrAik) // Load A[i,k].
-                        let bX4 := mload(ptrBjk) // Load B[j,k].
+                        let aX4 := mload(ptrAik) // Load packed A[i,k].
+                        let bX4 := mload(ptrBjk) // Load packed B[j,k].
 
-                        let s
-                        s := mul(and(aX4, _UINT64_MAX), and(bX4, _UINT64_MAX))
-                        c := add(c, s)
-                        s := mul(and(shr(64, aX4), _UINT64_MAX), and(shr(64, bX4), _UINT64_MAX))
-                        c := add(c, s)
-                        s := mul(and(shr(128, aX4), _UINT64_MAX), and(shr(128, bX4), _UINT64_MAX))
-                        c := add(c, s)
-                        s := mul(shr(192, aX4), shr(192, bX4))
-                        c := add(c, s)
-
-                        // c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
+                        c := add(c, mul(and(aX4, _UINT64_MAX), and(bX4, _UINT64_MAX)))
+                        c := add(c, mul(and(shr(64, aX4), _UINT64_MAX), and(shr(64, bX4), _UINT64_MAX)))
+                        c := add(c, mul(and(shr(128, aX4), _UINT64_MAX), and(shr(128, bX4), _UINT64_MAX)))
+                        c := add(c, mul(shr(192, aX4), shr(192, bX4)))
                     }
 
                     ptrAik = ptrAik + 32; // Advance to the next column of 32 byte words of `A`.
                     ptrBjk = ptrBjk + 32; // Advance to the next column of 32 byte words of `B`.
+                }
+
+                // Parse the last remaining word.
+                if (ptrAikRest != 0) {
+                    assembly {
+                        // Mask applies to leftover bits in word.
+                        let mask := not(shr(mul(ptrAikRest, 8), not(0)))
+                        let aX4 := and(mload(ptrAik), mask) // Load packed values from `A` at `ptrA`.
+                        let bX4 := and(mload(ptrBjk), mask) // Load packed values from `B` at `ptrB`.
+
+                        c := add(c, mul(and(shr(64, aX4), _UINT64_MAX), and(shr(64, bX4), _UINT64_MAX)))
+                        c := add(c, mul(and(shr(128, aX4), _UINT64_MAX), and(shr(128, bX4), _UINT64_MAX)))
+                        c := add(c, mul(shr(192, aX4), shr(192, bX4)))
+                    }
                 }
 
                 assembly {

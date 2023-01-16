@@ -261,12 +261,12 @@ contract TestM32x32 is TestHelper {
         assertEq(A.dotTransposed(B), C);
         assertNEq(B.dotTransposed(A), C);
 
-        // A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-        // B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
-        // C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
+        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
-        // assertEq(A.dotTransposed(B), C);
-        // assertNEq(B.dotTransposed(A), C);
+        assertEq(A.dotTransposed(B), C);
+        assertNEq(B.dotTransposed(A), C);
     }
 
     function test_add(uint256 n) public {
