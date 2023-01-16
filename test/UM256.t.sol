@@ -134,6 +134,16 @@ contract TestUM256 is TestHelper {
         assertNEq(A.reshape(3, 4), B);
     }
 
+    function test_fill(uint256 n, uint256 m) public {
+        n = bound(n, 0, 10);
+        m = bound(m, 0, 10);
+
+        UM256 A = zeros(n, m);
+        A.fill_(123);
+
+        assertEq(A, 123);
+    }
+
     /* ------------- conversions ------------- */
 
     function test_from() public {
@@ -207,18 +217,18 @@ contract TestUM256 is TestHelper {
         assertEq(A.sum(), 45);
     }
 
-    function test_addScalar() public {
+    function test_addScalarUnchecked() public {
         UM256 A = range(1, 10);
 
-        assertEq(A.addScalar(1), range(2, 11));
-        assertEq(A.addScalar(10), range(11, 20));
+        assertEq(A.addScalarUnchecked(1), range(2, 11));
+        assertEq(A.addScalarUnchecked(10), range(11, 20));
     }
 
-    function test_mulScalar() public {
+    function test_mulScalarUnchecked() public {
         UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
         UM256 B = fromUnsafe_([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
 
-        assertEq(A.mulScalar(2), B);
+        assertEq(A.mulScalarUnchecked(2), B);
     }
 
     function test_dot() public {
@@ -243,7 +253,7 @@ contract TestUM256 is TestHelper {
         UM256 A = range(1, 10);
 
         assertFalse(A.eqScalar(0));
-        assertTrue(A.mulScalar(0).eqScalar(0));
+        assertTrue(A.mulScalarUnchecked(0).eqScalar(0));
     }
 
     /* ------------- performance ------------- */
@@ -264,16 +274,16 @@ contract TestUM256 is TestHelper {
         eye(128, 128);
     }
 
-    function test__perf_addScalar_128() public pure {
+    function test__perf_addScalarUnchecked_128() public pure {
         UM256 A = zerosUnsafe(128, 128);
 
-        A.addScalar(1);
+        A.addScalarUnchecked(1);
     }
 
-    function test__perf_mulScalar_128() public pure {
+    function test__perf_mulScalarUnchecked_128() public pure {
         UM256 A = zerosUnsafe(128, 128);
 
-        A.mulScalar(1);
+        A.mulScalarUnchecked(1);
     }
 
     function test__perf_eqScalar_128() public pure {
@@ -311,6 +321,12 @@ contract TestUM256 is TestHelper {
         A.eq(B);
     }
 
+    function test__perf_fill_1024() public pure {
+        UM256 A = zerosUnsafe(128, 128);
+
+        A.fill_(1);
+    }
+
     /* ------------- memory safety ------------- */
 
     modifier testMemorySafe(UM256 A) {
@@ -338,12 +354,12 @@ contract TestUM256 is TestHelper {
         assertEq(v2, _MAGIC_VALUE, "Magic Value not found");
     }
 
-    function test_addScalar_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
-        memSafeTestMat.addScalar(1);
+    function test_addScalarUnchecked_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+        memSafeTestMat.addScalarUnchecked(1);
     }
 
-    function test_mulScalar_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
-        memSafeTestMat.mulScalar(1);
+    function test_mulScalarUnchecked_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+        memSafeTestMat.mulScalarUnchecked(1);
     }
 
     // function test_add_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {

@@ -254,7 +254,7 @@ contract TestHelper is Test {
     function logMat(UM256 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
-        string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
+        string memory str = string.concat("\nUM256(", vm.toString(n), ",", vm.toString(m), "):\n");
 
         uint256 max = 10;
 
@@ -273,7 +273,7 @@ contract TestHelper is Test {
     function logMat(M32x32 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
-        string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
+        string memory str = string.concat("\nM32x32(", vm.toString(n), ",", vm.toString(m), "):\n");
 
         uint256 max = 10;
 

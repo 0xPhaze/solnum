@@ -19,9 +19,10 @@ using {
     atIndex,
     set,
     setIndex,
+    fill_,
     add,
-    addScalar,
-    mulScalar,
+    addScalarUnchecked,
+    mulScalarUnchecked,
     add,
     dot,
     eq,
@@ -172,22 +173,24 @@ function zeros(uint256 n, uint256 m) pure returns (UM256 A) {
 }
 
 function ones(uint256 n, uint256 m) pure returns (UM256 A) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    A = zerosUnsafe(n, m);
+    unchecked {
+        // We can unsafely allocate a new matrix,
+        // because we will write to all memory slots.
+        A = zerosUnsafe(n, m);
 
-    // Obtain a reference to matrix data location.
-    uint256 ptr = ref(A);
+        // Obtain a reference to matrix data location.
+        uint256 ptr = ref(A);
 
-    // Loop over n * m elements * 32 bytes.
-    uint256 end = ptr + n * m * 32;
+        // Loop over n * m elements * 32 bytes.
+        uint256 end = ptr + n * m * 32;
 
-    while (ptr != end) {
-        assembly {
-            mstore(ptr, 1) // Store `1` at current pointer location.
+        while (ptr != end) {
+            assembly {
+                mstore(ptr, 1) // Store `1` at current pointer location.
+            }
+
+            ptr = ptr + 32; // Advance pointer to next slot.
         }
-
-        ptr = ptr + 32; // Advance pointer to next slot.
     }
 }
 
@@ -320,15 +323,13 @@ function set(UM256 A, uint256 i, uint256 j, uint256 value) pure {
 
 function add(UM256 A, UM256 B) pure returns (UM256 C) {
     unchecked {
-        (uint256 nA, uint256 mA, uint256 dataA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         if (nA != nB || mA != mB) revert UM256_IncompatibleDimensions();
 
         C = zerosUnsafe(nA, mA);
 
-        uint256 ptrA = dataA;
-        uint256 ptrB = dataB;
         uint256 endA = ptrA + nA * mA * 32;
         uint256 ptrC = ref(C);
 
@@ -449,7 +450,7 @@ function eq(UM256 A, UM256 B) pure returns (bool equals) {
 
 /* ------------- Mat x scalar operators ------------- */
 
-function addScalar(UM256 A, uint256 s) pure returns (UM256 C) {
+function addScalarUnchecked(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
@@ -473,7 +474,7 @@ function addScalar(UM256 A, uint256 s) pure returns (UM256 C) {
     }
 }
 
-function mulScalar(UM256 A, uint256 s) pure returns (UM256 C) {
+function mulScalarUnchecked(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
@@ -533,6 +534,23 @@ function eqScalar(UM256 A, uint256 value) pure returns (bool equals) {
             if (!equals) break;
 
             ptrA = ptrA + 32;
+        }
+    }
+}
+
+function fill_(UM256 A, uint256 a) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptr) = header(A);
+
+        // Loop over n * m elements of 8 bytes.
+        uint256 end = ptr + n * m * 32;
+
+        while (ptr != end) {
+            assembly {
+                mstore(ptr, a) // Store `a` at current pointer location.
+            }
+
+            ptr = ptr + 32; // Advance pointer to next slot.
         }
     }
 }

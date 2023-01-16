@@ -23,9 +23,10 @@ using {
     set,
     setUnsafe,
     setIndex,
+    fill_,
     add,
-    addScalar,
-    mulScalar,
+    addScalarUnchecked,
+    mulScalarUnchecked,
     add,
     dot,
     eq,
@@ -152,7 +153,7 @@ function zeros(uint256 n, uint256 m) pure returns (M32x32 A) {
         // Generate metadata header.
         A = M32x32Header(ptr, n, m);
 
-        // Loop over n * m elements of 8 bytes.
+        // Loop over `n * m` elements of 8 bytes.
         // 4 elements are stored per word.
         // Rounded up to slots of 32 bytes.
         uint256 end = ptr + ((n * m * 8 + 31) & ~uint256(31));
@@ -171,24 +172,26 @@ function zeros(uint256 n, uint256 m) pure returns (M32x32 A) {
 uint256 constant ONES_X4 = 0x1000000000000000100000000000000010000000000000001;
 
 function ones(uint256 n, uint256 m) pure returns (M32x32 A) {
-    // We can unsafely allocate a new matrix,
-    // because we will write to all memory slots.
-    A = zerosUnsafe(n, m);
+    unchecked {
+        // We can unsafely allocate a new matrix,
+        // because we will write to all memory slots.
+        A = zerosUnsafe(n, m);
 
-    // Obtain a reference to matrix data location.
-    uint256 ptr = ref(A);
+        // Obtain a reference to matrix data location.
+        uint256 ptr = ref(A);
 
-    // Loop over n * m elements of 8 bytes.
-    uint256 end = ptr + ((n * m * 8 + 31) & ~uint256(31));
+        // Loop over `n * m` elements of 8 bytes.
+        uint256 end = ptr + ((n * m * 8 + 31) & ~uint256(31));
 
-    // NOTE: if array is not divisible by 4 we are overshooting.
-    while (ptr != end) {
-        assembly {
-            // Store `1` at current pointer location in all 4 chunks.
-            mstore(ptr, ONES_X4)
+        // NOTE: if array is not divisible by 4 we are overshooting.
+        while (ptr != end) {
+            assembly {
+                // Store `1` at current pointer location in all 4 chunks.
+                mstore(ptr, ONES_X4)
+            }
+
+            ptr = ptr + 32; // Advance pointer to next slot.
         }
-
-        ptr = ptr + 32; // Advance pointer to next slot.
     }
 }
 
@@ -206,7 +209,7 @@ function eye(uint256 n, uint256 m) pure returns (M32x32 A) {
         uint256 ptr = ref(A) - 24;
         // Spacing in memory between the elements on the diagonal.
         uint256 diagSpace = 8 + n * 8;
-        // Loop over n diagonal elements.
+        // Loop over `n` diagonal elements.
         uint256 end = ptr + n * diagSpace;
 
         while (ptr != end) {
@@ -330,7 +333,7 @@ function set(M32x32 A, uint256 i, uint256 j, uint256 value) pure {
     }
 }
 
-function setUnsafe(M32x32 A, int256 i, int256 j, uint256 value) pure {
+function setUnsafe(M32x32 A, uint256 i, uint256 j, uint256 value) pure {
     unchecked {
         (, uint256 m, uint256 ptr) = header(A);
 
@@ -347,31 +350,63 @@ function setUnsafe(M32x32 A, int256 i, int256 j, uint256 value) pure {
 /* ------------- Mat x Mat operators ------------- */
 
 function add(M32x32 A, M32x32 B) pure returns (M32x32 C) {
+    (uint256 n, uint256 m) = A.shape();
+
+    // Allocate new matrix of the same dimensions.
+    C = zerosUnsafe(n, m);
+
+    // Add scalar `A` and `B`, store result in `C`.
+    addTo_(A, B, C);
+}
+
+function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
     unchecked {
-        (uint256 nA, uint256 mA, uint256 dataA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         if (nA != nB || mA != mB) revert M32x32_IncompatibleDimensions();
 
-        C = zerosUnsafe(nA, mA);
+        // uint256 ptrA = dataA;
+        // uint256 ptrB = dataB;
+        // uint256 endA = ptrA + nA * mA * 32;
+        // uint256 ptrC = ref(C);
 
-        uint256 ptrA = dataA;
-        uint256 ptrB = dataB;
-        uint256 endA = ptrA + nA * mA * 32;
+        // Loop over `nA * mA` elements of 8 bytes.
+        uint256 size = nA * mA * 8;
+        // Up until here we can load & parse full words.
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = ptrA + size - endA;
+        // Obtain a reference to `C`s data location.
         uint256 ptrC = ref(C);
 
         while (ptrA != endA) {
             assembly {
-                let a := mload(ptrA)
-                let b := mload(ptrB)
-                let c := add(a, b)
+                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+                let b := mload(ptrB) // Load 4 values from `B` at `ptrB`.
+                let c := add(a, b) // Add packed values together.
 
-                mstore(ptrC, c)
+                mstore(ptrC, c) // Store packed values in `ptrC`.
             }
 
+            // Advance pointers to next slot.
             ptrA = ptrA + 32;
             ptrB = ptrB + 32;
             ptrC = ptrC + 32;
+        }
+
+        // Parse the last remaining word.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 8), not(0)))
+                let a := mload(ptrA) // Load packed values from `A` at `ptrA`.
+                let b := mload(ptrB) // Load packed values from `B` at `ptrB`.
+                // Apply mask to clear out any unwanted right-aligned bits.
+                let c := add(and(a, mask), and(b, mask)) // Add packed values together.
+
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+            }
         }
     }
 }
@@ -460,6 +495,7 @@ function eq(M32x32 A, M32x32 B) pure returns (bool equals) {
 
         equals = nA == nB && mA == mB;
 
+        // Loop over `n * m` elements of 8 bytes.
         uint256 size = nA * mA * 8;
         // Up until here we can load & parse full words.
         uint256 endA = ptrA + (size & ~uint256(31));
@@ -500,50 +536,112 @@ function eq(M32x32 A, M32x32 B) pure returns (bool equals) {
 
 /* ------------- Mat x scalar operators ------------- */
 
-function addScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
+function addScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
+    (uint256 n, uint256 m) = A.shape();
+
+    // Allocate new matrix of the same dimensions.
+    C = zerosUnsafe(n, m);
+
+    // Add scalar `s` to `A`, store result in `C`.
+    addScalarUncheckedTo_(A, s, C);
+}
+
+function addScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
     unchecked {
-        (uint256 n, uint256 m, uint256 ptr) = header(A);
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
-        C = zerosUnsafe(n, m);
-
-        uint256 ptrA = ptr;
-        uint256 endA = ptrA + n * m * 32;
+        // Loop over `n * m` elements of 8 bytes.
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words.
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = ptrA + size - endA;
+        // Pack `s` in one word for efficiency.
+        uint256 valueX4 = packWordUnsafe(s, s, s, s);
+        // Obtain a reference to `C`s data location.
         uint256 ptrC = ref(C);
 
+        // Loop over 32 byte words.
         while (ptrA != endA) {
             assembly {
-                let a := mload(ptrA)
-                let c := add(a, s)
+                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+                let c := add(a, valueX4) // Add packed values together.
 
-                mstore(ptrC, c)
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
             }
 
+            // Advance pointers to next slot.
             ptrA = ptrA + 32;
             ptrC = ptrC + 32;
+        }
+
+        // Parse the last remaining word.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 8), not(0)))
+                // Load packed values from `A` at `ptrA`.
+                let a := mload(ptrA)
+                // Apply mask to clear out any unwanted right-aligned bits.
+                let c := add(and(a, mask), and(valueX4, mask)) // Add packed values together.
+
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+            }
         }
     }
 }
 
-function mulScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
+function mulScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
+    (uint256 n, uint256 m) = A.shape();
+
+    // Allocate new matrix of the same dimensions.
+    C = zerosUnsafe(n, m);
+
+    // Multiply `A` with scalar `s`, store result in `C`.
+    mulScalarUncheckedTo_(A, s, C);
+}
+
+function mulScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
     unchecked {
-        (uint256 n, uint256 m, uint256 ptr) = header(A);
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
-        C = zerosUnsafe(n, m);
-
-        uint256 ptrA = ptr;
-        uint256 endA = ptrA + n * m * 32;
+        // Loop over `n * m` elements of 8 bytes.
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words.
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = ptrA + size - endA;
+        // // Pack `s` in one word for efficiency.
+        // uint256 valueX4 = packWordUnsafe(s, s, s, s);
+        // Obtain a reference to `C`s data location.
         uint256 ptrC = ref(C);
 
+        // Loop over 32 byte words.
         while (ptrA != endA) {
             assembly {
-                let a := mload(ptrA)
-                let c := mul(a, s)
+                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+                let c := mul(a, s) // Multiply packed values together.
 
-                mstore(ptrC, c)
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
             }
 
+            // Advance pointers to next slot.
             ptrA = ptrA + 32;
             ptrC = ptrC + 32;
+        }
+
+        // Parse the last remaining word in chunks of 8 bytes.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 8), not(0)))
+                // Load packed values from `A` at `ptrA`.
+                let a := mload(ptrA)
+                // Apply mask to clear out any unwanted right-aligned bits.
+                let c := mul(and(a, mask), s) // Multiply packed values together.
+
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+            }
         }
     }
 }
@@ -554,6 +652,7 @@ function sum(M32x32 A) pure returns (uint256 s) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
+        // Loop over `n * m` elements of 8 bytes.
         uint256 size = n * m * 8;
         // Up until here we can load & parse full words.
         uint256 end = ptr + (size & ~uint256(31));
@@ -595,12 +694,13 @@ function eqScalar(M32x32 A, uint256 value) pure returns (bool equals) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
+        // Loop over `n * m` elements of 8 bytes.
         uint256 size = n * m * 8;
         // Up until here we can load & parse full words.
         uint256 end = ptr + (size & ~uint256(31));
         // The rest needs to be parsed individually.
         uint256 rest = ptr + size - end;
-        // Pack value in one word for efficiency.
+        // Pack `value` in one word for efficiency.
         uint256 valueX4 = packWordUnsafe(value, value, value, value);
 
         equals = true;
@@ -615,7 +715,7 @@ function eqScalar(M32x32 A, uint256 value) pure returns (bool equals) {
 
             if (!equals) break;
 
-            ptr = ptr + 32;
+            ptr = ptr + 32; // Advance pointer to next slot.
         }
 
         uint256 word;
@@ -630,6 +730,28 @@ function eqScalar(M32x32 A, uint256 value) pure returns (bool equals) {
 
             equals = equals && (a == value);
             rest = rest - 8;
+        }
+    }
+}
+
+function fill_(M32x32 A, uint256 a) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptr) = header(A);
+
+        // Loop over `n * m` elements of 8 bytes.
+        uint256 end = ptr + ((n * m * 8 + 31) & ~uint256(31));
+
+        // Pack `value` in one word for efficiency.
+        uint256 aX4 = packWordUnsafe(a, a, a, a);
+
+        // NOTE: if array is not divisible by 4 we are overshooting.
+        while (ptr != end) {
+            assembly {
+                // Store `a` at current pointer location in all 4 chunks.
+                mstore(ptr, aX4)
+            }
+
+            ptr = ptr + 32; // Advance pointer to next slot.
         }
     }
 }

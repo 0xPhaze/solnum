@@ -70,9 +70,7 @@ contract TestM32x32 is TestHelper {
 
         M32x32 A = ones(n, m);
 
-        for (uint256 k; k < n * m; k++) {
-            assertEq(A.atIndex(k), 1);
-        }
+        assertEq(A, 1);
     }
 
     /* ------------- set ------------- */
@@ -150,6 +148,16 @@ contract TestM32x32 is TestHelper {
     //     assertEq(A.reshape(4, 3), B);
     //     assertNEq(A.reshape(3, 4), B);
     // }
+
+    function test_fill(uint256 n, uint256 m, uint64 num) public {
+        n = bound(n, 0, 10);
+        m = bound(m, 0, 10);
+
+        M32x32 A = zeros(n, m);
+        A.fill_(num);
+
+        assertEq(A, num);
+    }
 
     // /* ------------- conversions ------------- */
 
@@ -238,19 +246,31 @@ contract TestM32x32 is TestHelper {
         assertEq(range(1, 10).reshape(3, 3).sum(), 45);
     }
 
-    // function test_addScalar() public {
-    //     M32x32 A = range(1, 10);
+    function test_addScalarUnchecked() public {
+        M32x32 A;
 
-    //     assertEq(A.addScalar(1), range(2, 11));
-    //     assertEq(A.addScalar(10), range(11, 20));
-    // }
+        for (uint256 i = 1; i < 10; i++) {
+            A = ones(1, i);
 
-    // function test_mulScalar() public {
-    //     M32x32 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     M32x32 B = fromUnsafe_([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
+            A.setUnsafe(0, i, MAX_64_BITS);
+            A = A.addScalarUnchecked(2);
 
-    //     assertEq(A.mulScalar(2), B);
-    // }
+            assertEq(A, 3);
+        }
+    }
+
+    function test_mulScalarUnchecked() public {
+        M32x32 A;
+
+        for (uint256 i = 1; i < 10; i++) {
+            A = ones(1, i);
+
+            A.setUnsafe(0, i, MAX_64_BITS);
+            A = A.mulScalarUnchecked(3);
+
+            assertEq(A, 3);
+        }
+    }
 
     // function test_dot() public {
     //     M32x32 A = fromUnsafe_([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
@@ -261,57 +281,66 @@ contract TestM32x32 is TestHelper {
     //     assertNEq(B.dot(A), C);
     // }
 
-    // function test_add() public {
-    //     M32x32 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     M32x32 B = fromUnsafe_([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-    //     M32x32 C = fromUnsafe_([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
+    function test_add() public {
+        M32x32 A;
+        M32x32 B;
 
-    //     assertEq(A.add(B), C);
-    //     assertEq(A.add(zeros(3, 3)), A);
-    // }
+        for (uint256 i = 1; i < 12; i++) {
+            A = range(i);
+            B = range(i);
+
+            // Make sure this value isn't touched.
+            A.setUnsafe(0, i, MAX_64_BITS);
+            B.setUnsafe(0, i, MAX_64_BITS);
+
+            assertEq(A.add(B), A.mulScalarUnchecked(2));
+            assertEq(A.add(zeros(1, i)), A);
+        }
+    }
 
     function test_eqScalar() public {
         M32x32 A;
 
         for (uint256 i = 1; i < 12; i++) {
             A = ones(1, i);
-            A.setUnsafe(0, int256(i), 0x1337);
+
+            A.setUnsafe(0, i, MAX_64_BITS);
             assertEq(A, 1);
 
-            A.set(0, i - 1, 0x1337);
+            A.set(0, i - 1, 0);
             assertFalse(A.eqScalar(1));
         }
     }
 
-    // /* ------------- performance ------------- */
+    /* ------------- performance ------------- */
 
-    // function test__perf_range_1024() public pure {
-    //     range(1024);
-    // }
+    function test__perf_range_1024() public pure {
+        range(1024);
+    }
 
     function test__perf_zeros_128() public pure {
         zeros(128, 128);
     }
 
-    // function test__perf_ones_128() public pure {
-    //     ones(128, 128);
-    // }
+    function test__perf_ones_128() public pure {
+        ones(128, 128);
+    }
 
-    // function test__perf_eye_128() public pure {
-    //     eye(128, 128);
-    // }
+    function test__perf_eye_128() public pure {
+        eye(128, 128);
+    }
 
-    // function test__perf_addScalar_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
+    function test__perf_addScalarUnchecked_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
 
-    //     A.addScalar(1);
-    // }
+        A.addScalarUnchecked(1);
+    }
 
-    // function test__perf_mulScalar_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
+    function test__perf_mulScalarUnchecked_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
 
-    //     A.mulScalar(1);
-    // }
+        A.mulScalarUnchecked(1);
+    }
 
     function test__perf_eqScalar_128() public pure {
         M32x32 A = zerosUnsafe(128, 128);
@@ -321,12 +350,12 @@ contract TestM32x32 is TestHelper {
         A.eqScalar(1);
     }
 
-    // function test__perf_add_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
-    //     M32x32 B = zerosUnsafe(128, 128);
+    function test__perf_add_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 B = zerosUnsafe(128, 128);
 
-    //     A.add(B);
-    // }
+        A.add(B);
+    }
 
     // function test__perf_dot_128() public pure {
     //     M32x32 A = zerosUnsafe(128, 128);
@@ -341,10 +370,16 @@ contract TestM32x32 is TestHelper {
         A.sum();
     }
 
-    // function test__perf_eq_128() public pure {
-    //     M32x32 A = zerosUnsafe(128, 128);
-    //     M32x32 B = zerosUnsafe(128, 128);
+    function test__perf_eq_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
+        M32x32 B = zerosUnsafe(128, 128);
 
-    //     A.eq(B);
-    // }
+        A.eq(B);
+    }
+
+    function test__perf_fill_1024() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
+
+        A.fill_(1);
+    }
 }
