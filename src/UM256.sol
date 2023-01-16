@@ -335,29 +335,29 @@ function dot(UM256 A, UM256 B) pure returns (UM256 C) {
 
         C = mallocUM256(nA, mB);
 
-        uint256 ptrC = ref(C);
+        uint256 ptrCij = ref(C);
 
         uint256 ptrARowSize = 32 * mA;
         uint256 ptrBRowSize = 32 * mB;
 
-        uint256 ptrARowEnd = dataPtrA + 32 * nA * mA;
-        uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrAiEnd = dataPtrA + 32 * nA * mA;
+        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
 
-        uint256 ptrBColEnd = dataPtrB + ptrBRowSize;
-        uint256 ptrBCol;
+        uint256 ptrBjEnd = dataPtrB + ptrBRowSize;
+        uint256 ptrBj;
 
         // Loop over `C`s `i` indices.
-        while (ptrARow != ptrARowEnd) {
+        while (ptrAi != ptrAiEnd) {
             // i-loop start.
 
-            ptrBCol = dataPtrB;
+            ptrBj = dataPtrB;
 
-            while (ptrBCol != ptrBColEnd) {
+            while (ptrBj != ptrBjEnd) {
                 // j-loop start.
 
-                uint256 ptrB = ptrBCol;
-                uint256 ptrA = ptrARow;
-                uint256 ptrAInnerEnd = ptrARow + ptrARowSize;
+                uint256 ptrBkj = ptrBj;
+                uint256 ptrAik = ptrAi;
+                uint256 ptrAikEnd = ptrAi + ptrARowSize;
 
                 // Perform the dot product on the current
                 // row vector of `A` and the column vector of `B`.
@@ -365,29 +365,29 @@ function dot(UM256 A, UM256 B) pure returns (UM256 C) {
                 uint256 c;
 
                 // Loop over 32 byte words.
-                while (ptrA != ptrAInnerEnd) {
+                while (ptrAik != ptrAikEnd) {
                     // k-loop start.
 
                     assembly {
-                        let a := mload(ptrA) // Load A[i,k].
-                        let b := mload(ptrB) // Load B[k,j].
+                        let a := mload(ptrAik) // Load A[i,k].
+                        let b := mload(ptrBkj) // Load B[k,j].
 
                         c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
                     }
 
-                    ptrA = ptrA + 32; // Loop over `A`s columns.
-                    ptrB = ptrB + ptrBRowSize; // Loop over `B`s rows.
+                    ptrAik = ptrAik + 32; // Advance to the next column of `A`.
+                    ptrBkj = ptrBkj + ptrBRowSize; // Advance to the next row of `B`.
                 }
 
                 assembly {
-                    mstore(ptrC, c) // Store the result in C[i,j].
+                    mstore(ptrCij, c) // Store the result in C[i,j].
                 }
 
-                ptrC = ptrC + 32; // Advance to the next element of `C`.
-                ptrBCol = ptrBCol + 32; // Advance to the next column of `B`.
+                ptrCij = ptrCij + 32; // Advance to the next element of `C`.
+                ptrBj = ptrBj + 32; // Advance to the next column of `B`.
             }
 
-            ptrARow = ptrARow + ptrARowSize; // Advance to the next row of `A`.
+            ptrAi = ptrAi + ptrARowSize; // Advance to the next row of `A`.
         }
     }
 }
@@ -402,29 +402,30 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
 
         C = mallocUM256(nA, nB);
 
-        uint256 ptrC = ref(C);
+        uint256 ptrCij = ref(C);
 
         uint256 ptrARowSize = 32 * mA;
         uint256 ptrBRowSize = 32 * mB;
 
-        uint256 ptrARowEnd = dataPtrA + 32 * nA * mA;
-        uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrAiEnd = dataPtrA + 32 * nA * mA;
+        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
 
-        uint256 ptrBRowEnd = dataPtrB + 32 * nB * mB;
-        uint256 ptrBRow;
+        uint256 ptrBjEnd = dataPtrB + 32 * nB * mB;
+        uint256 ptrBj;
 
         // Loop over `C`s `i` indices.
-        while (ptrARow != ptrARowEnd) {
+        while (ptrAi != ptrAiEnd) {
             // i-loop start.
 
-            ptrBRow = dataPtrB;
+            ptrBj = dataPtrB;
 
-            while (ptrBRow != ptrBRowEnd) {
+            while (ptrBj != ptrBjEnd) {
                 // j-loop start.
 
-                uint256 ptrB = ptrBRow;
-                uint256 ptrA = ptrARow;
-                uint256 ptrAInnerEnd = ptrARow + ptrARowSize;
+                uint256 ptrBjk = ptrBj;
+                uint256 ptrAik = ptrAi;
+                // End inner loop after one row of `A`.
+                uint256 ptrAikEnd = ptrAi + ptrARowSize;
 
                 // Perform the dot product on the current
                 // row vector of `A` and the column vector of `B`.
@@ -432,29 +433,29 @@ function dotTransposed(UM256 A, UM256 B) pure returns (UM256 C) {
                 uint256 c;
 
                 // Loop over 32 byte words.
-                while (ptrA != ptrAInnerEnd) {
+                while (ptrAik != ptrAikEnd) {
                     // k-loop start.
 
                     assembly {
-                        let a := mload(ptrA) // Load A[i,k].
-                        let b := mload(ptrB) // Load B[j,k].
+                        let a := mload(ptrAik) // Load A[i,k].
+                        let b := mload(ptrBjk) // Load B[j,k].
 
                         c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
                     }
 
-                    ptrA = ptrA + 32; // Loop over `A`s columns.
-                    ptrB = ptrB + 32; // Loop over `B`s columns.
+                    ptrAik = ptrAik + 32; // Loop over `A`s columns.
+                    ptrBjk = ptrBjk + 32; // Loop over `B`s columns.
                 }
 
                 assembly {
-                    mstore(ptrC, c) // Store the result in C[i,j].
+                    mstore(ptrCij, c) // Store the result in C[i,j].
                 }
 
-                ptrC = ptrC + 32; // Advance to the next element of `C`.
-                ptrBRow = ptrBRow + ptrBRowSize; // Advance to the next row of `B`.
+                ptrCij = ptrCij + 32; // Advance to the next element of `C`.
+                ptrBj = ptrBj + ptrBRowSize; // Advance to the next row of `B`.
             }
 
-            ptrARow = ptrARow + ptrARowSize; // Advance to the next row of `A`.
+            ptrAi = ptrAi + ptrARowSize; // Advance to the next row of `A`.
         }
     }
 }
