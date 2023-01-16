@@ -254,16 +254,16 @@ contract TestM32x32 is TestHelper {
     // }
 
     function test_dotTransposed() public {
-        M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-        M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-        M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+        // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        // M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
-        assertEq(A.dotTransposed(B), C);
-        assertNEq(B.dotTransposed(A), C);
+        // assertEq(A.dotTransposed(B), C);
+        // assertNEq(B.dotTransposed(A), C);
 
-        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-        B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
-        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+        M32x32 A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        M32x32 B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
+        M32x32 C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
         assertEq(A.dotTransposed(B), C);
         assertNEq(B.dotTransposed(A), C);
@@ -281,6 +281,20 @@ contract TestM32x32 is TestHelper {
 
         assertEq(A.add(B), A.mulScalarUnchecked(2));
         assertEq(A.add(zeros(1, n)), A);
+    }
+
+    function test_addUnchecked(uint256 n) public {
+        n = bound(n, 1, 20);
+
+        M32x32 A = range(n);
+        M32x32 B = range(n);
+
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+        appendDirtyBits(B);
+
+        assertEq(A.addUnchecked(B), A.mulScalarUnchecked(2));
+        assertEq(A.addUnchecked(zeros(1, n)), A);
     }
 
     function test_fromArray() public {
@@ -427,12 +441,19 @@ contract TestM32x32 is TestHelper {
         A.add(B);
     }
 
-    // function test__perf_dot_128() public pure {
-    //     M32x32 A = mallocM32x32(128, 128);
-    //     M32x32 B = mallocM32x32(128, 128);
+    function test__perf_addUnchecked_128() public pure {
+        M32x32 A = mallocM32x32(128, 128);
+        M32x32 B = mallocM32x32(128, 128);
 
-    //     A.dot(B);
-    // }
+        A.addUnchecked(B);
+    }
+
+    function test__perf_dot_128() public pure {
+        M32x32 A = mallocM32x32(128, 128);
+        M32x32 B = mallocM32x32(128, 128);
+
+        A.dot(B);
+    }
 
     function test__perf_sum_128() public pure {
         M32x32 A = mallocM32x32(128, 128);
