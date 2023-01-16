@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "src/M32x32.sol";
+import "src/N32x32.sol";
 import "./utils/TestHelper.sol";
 
 contract TestM32x32 is TestHelper {
@@ -80,6 +81,9 @@ contract TestM32x32 is TestHelper {
 
         M32x32 A = zeros(1, n);
 
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+
         uint256[10] memory B;
 
         // Store data at random positions.
@@ -106,6 +110,9 @@ contract TestM32x32 is TestHelper {
         m = bound(m, 1, 10);
 
         M32x32 A = zeros(n, m);
+
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
 
         uint256[10][10] memory B;
 
@@ -141,175 +148,206 @@ contract TestM32x32 is TestHelper {
         }
     }
 
-    // function test_reshape() public {
-    //     M32x32 A = range(1, 13);
-    //     M32x32 B = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+    function test_reshape() public {
+        M32x32 A = range(1, 13);
+        M32x32 B = range(1, 13);
 
-    //     assertEq(A.reshape(4, 3), B);
-    //     assertNEq(A.reshape(3, 4), B);
-    // }
+        assertEq(A.reshape(4, 3), B.reshape(4, 3));
+        assertNEq(A.reshape(3, 4), B.reshape(4, 3));
+    }
 
-    function test_fill(uint256 n, uint256 m, uint64 num) public {
+    function test_full(uint256 n, uint256 m, uint64 s) public {
+        n = bound(n, 0, 10);
+        m = bound(m, 0, 10);
+
+        M32x32 A = full(n, m, s);
+
+        assertEq(A, s);
+    }
+
+    function test_fill(uint256 n, uint256 m, uint64 s) public {
         n = bound(n, 0, 10);
         m = bound(m, 0, 10);
 
         M32x32 A = zeros(n, m);
-        A.fill_(num);
+        A.fill_(s);
 
-        assertEq(A, num);
+        assertEq(A, s);
     }
-
-    // /* ------------- conversions ------------- */
-
-    // function test_from() public {
-    //     M32x32 A = fromUnsafe_(MATRIX_43);
-    //     (uint256 n, uint256 m) = (4, 3);
-
-    //     for (uint256 i; i < n; ++i) {
-    //         for (uint256 j; j < m; ++j) {
-    //             assertEq(A.at(i, j), MATRIX_43[i][j]);
-    //         }
-    //     }
-
-    //     (uint256 nA, uint256 mA, uint256 dataA) = A.header();
-
-    //     assertEq(nA, n);
-    //     assertEq(mA, m);
-    //     assertTrue(dataA != 0);
-    // }
-
-    // function test_from_bytes() public {
-    //     M32x32 A = fromUnsafe_(MATRIX_43);
-    //     M32x32 B = from_(abi.encode(MATRIX_43), 4, 3);
-
-    //     (uint256 nA, uint256 mA, uint256 dataA) = A.header();
-    //     (uint256 nB, uint256 mB, uint256 dataB) = B.header();
-
-    //     assertEq(A, B);
-    //     assertEq(nA, nB);
-    //     assertEq(mA, mB);
-    //     assertTrue(dataA != 0);
-    //     assertTrue(dataB != 0);
-    //     assertTrue(dataA != dataB);
-    // }
-
-    // function test_toBytes() public {
-    //     M32x32 A = fromUnsafe_(MATRIX_43);
-    //     M32x32 B = from_(A._bytes(), 4, 3);
-
-    //     // The header data should actually be equal now,
-    //     // because we're referencing the same underlying data.
-    //     assertEq(B._bytes().length, 4 * 3 * 32);
-    //     assertEq(M32x32.unwrap(A), M32x32.unwrap(B));
-    // }
-
-    // function test_copy() public {
-    //     M32x32 A = fromUnsafe_(MATRIX_43);
-    //     M32x32 B = A.copy();
-
-    //     assertEq(A, B);
-    //     assertTrue(A.ref() != B.ref());
-    // }
 
     /* ------------- functions ------------- */
 
-    function test_eq() public {
-        M32x32 A = range(1, 10).reshape(3, 3);
-        M32x32 B = A.copy();
+    function test_sum(uint256 n, uint256 m) public {
+        n = bound(n, 1, 10);
+        m = bound(m, 1, 10);
 
-        assertEq(A, B);
+        uint256 len = n * m;
 
-        A.set(0, 2, 9);
-        assertFalse(A.eq(B));
+        M32x32 A = range(1, len + 1).reshape(n, m);
 
-        A.set(0, 2, 3);
-        assertEq(A, B);
-
-        A = range(8);
-
-        // Write over dirty data.
-        setFreeMemPtr(A.ref());
-        assertEq(ones(1, 5), ones(1, 5));
-
-        setFreeMemPtr(A.ref());
-        assertEq(ones(1, 6), ones(1, 6));
-
-        setFreeMemPtr(A.ref());
-        assertEq(ones(1, 7), ones(1, 7));
+        assertEq(A.sum(), len * (len + 1) / 2);
     }
 
-    function test_sum() public {
-        assertEq(range(1, 9).sum(), 36);
-        assertEq(range(1, 10).sum(), 45);
-        assertEq(range(1, 11).sum(), 55);
-        assertEq(range(1, 12).sum(), 66);
-        assertEq(range(1, 10).reshape(3, 3).sum(), 45);
+    function test_addScalar(uint256 n, uint256 s) public {
+        n = bound(n, 1, 20);
+        s = bound(s, 1, UINT256_INT64_MAX);
+
+        M32x32 A = zeros(1, n);
+
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+
+        assertEq(A.addScalar(s), s);
     }
 
-    function test_addScalarUnchecked() public {
-        M32x32 A;
+    function test_addScalarUnchecked(uint256 n, uint256 s) public {
+        n = bound(n, 1, 20);
+        s = bound(s, 1, UINT64_MAX);
 
-        for (uint256 i = 1; i < 10; i++) {
-            A = ones(1, i);
+        M32x32 A = zeros(1, n);
 
-            A.setUnsafe(0, i, MAX_64_BITS);
-            A = A.addScalarUnchecked(2);
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
 
-            assertEq(A, 3);
-        }
+        assertEq(A.addScalarUnchecked(s), s);
     }
 
-    function test_mulScalarUnchecked() public {
-        M32x32 A;
+    function test_mulScalar(uint256 n, uint256 s) public {
+        n = bound(n, 1, 20);
+        s = bound(s, 1, UINT256_INT64_MAX);
 
-        for (uint256 i = 1; i < 10; i++) {
-            A = ones(1, i);
+        M32x32 A = ones(1, n);
 
-            A.setUnsafe(0, i, MAX_64_BITS);
-            A = A.mulScalarUnchecked(3);
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
 
-            assertEq(A, 3);
-        }
+        assertEq(A.mulScalar(s), s);
+    }
+
+    function test_mulScalarUnchecked(uint256 n, uint256 s) public {
+        n = bound(n, 1, 20);
+        s = bound(s, 1, UINT64_MAX);
+
+        M32x32 A = ones(1, n);
+
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+
+        assertEq(A.mulScalarUnchecked(s), s);
     }
 
     // function test_dot() public {
-    //     M32x32 A = fromUnsafe_([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-    //     M32x32 B = fromUnsafe_([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-    //     M32x32 C = fromUnsafe_([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
+    //     // M32x32 A = range(1, 9).reshape(2, 4);
+    //     // M32x32 B = range(10, 18).reshape(4, 2);
+    //     // M32x32 C = fromArray([[uint256(130), 140], [uint256(322), 348]]);
+
+    //     M32x32 A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+    //     M32x32 B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
+    //     M32x32 C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+
+    //     // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+    //     // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+    //     // M32x32 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
     //     assertEq(A.dot(B), C);
-    //     assertNEq(B.dot(A), C);
+    //     // assertNEq(B.dot(A), C);
     // }
 
-    function test_add() public {
-        M32x32 A;
-        M32x32 B;
+    function test_add(uint256 n) public {
+        n = bound(n, 1, 20);
 
-        for (uint256 i = 1; i < 12; i++) {
-            A = range(i);
-            B = range(i);
+        M32x32 A = range(n);
+        M32x32 B = range(n);
 
-            // Make sure this value isn't touched.
-            A.setUnsafe(0, i, MAX_64_BITS);
-            B.setUnsafe(0, i, MAX_64_BITS);
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+        appendDirtyBits(B);
 
-            assertEq(A.add(B), A.mulScalarUnchecked(2));
-            assertEq(A.add(zeros(1, i)), A);
-        }
+        assertEq(A.add(B), A.mulScalarUnchecked(2));
+        assertEq(A.add(zeros(1, n)), A);
     }
 
-    function test_eqScalar() public {
-        M32x32 A;
+    function test_fromArray() public {
+        M32x32 A = fromArray([[1, 2, 3, 4], [5, 6, 7, 8]]);
+        M32x32 B = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
-        for (uint256 i = 1; i < 12; i++) {
-            A = ones(1, i);
+        assertEq(A, range(1, 9).reshape(2, 4));
+        assertEq(B, range(1, 10).reshape(3, 3));
+    }
 
-            A.setUnsafe(0, i, MAX_64_BITS);
-            assertEq(A, 1);
+    uint256 constant UINT256_INT64_MAX = uint256(uint64(type(int64).max));
+    uint256 constant UINT256_INT64_MIN = uint256(uint64(type(int64).min));
 
-            A.set(0, i - 1, 0);
-            assertFalse(A.eqScalar(1));
-        }
+    function test_addScalar_revert_overflow(uint256 n) public {
+        M32x32 A = ones(1, bound(n, 1, 20));
+
+        vm.expectRevert();
+        A.addScalar(UINT256_INT64_MAX);
+    }
+
+    function test_addScalar_revert_underflow(uint256 n) public {
+        M32x32 A = ones(1, bound(n, 1, 20));
+
+        vm.expectRevert();
+        A.addScalar(UINT256_INT64_MIN);
+    }
+
+    function test_mulScalar_revert_overflow(uint256 n) public {
+        M32x32 A = ones(1, bound(n, 1, 20)).mulScalar(2);
+
+        vm.expectRevert();
+        A.mulScalar(UINT256_INT64_MAX);
+    }
+
+    function test_mulScalar_revert_underflow(uint256 n) public {
+        M32x32 A = ones(1, bound(n, 1, 20)).mulScalar(2);
+
+        vm.expectRevert();
+        A.mulScalar(UINT256_INT64_MIN);
+    }
+
+    function test_add_revert_overflow(uint256 n) public {
+        M32x32 A = ones(1, bound(n, 1, 20));
+        M32x32 B = full(1, bound(n, 1, 20), UINT256_INT64_MAX);
+
+        logMat(B);
+
+        vm.expectRevert();
+        A.add(B);
+    }
+
+    function test_eqScalar(uint256 n, uint256 i) public {
+        n = bound(n, 1, 20);
+        i = bound(i, 0, n - 1);
+
+        M32x32 A = ones(1, n);
+
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+
+        assertEq(A, 1);
+
+        // Setting any entry to `0`, `A = 1` does not hold.
+        A.set(0, i, 0);
+        assertFalse(A.eqScalar(1));
+    }
+
+    function test_eq(uint256 n, uint256 i) public {
+        n = bound(n, 1, 20);
+        i = bound(i, 0, n - 1);
+
+        M32x32 A = range(1, n + 1);
+        M32x32 B = range(1, n + 1);
+
+        // Make sure out of bounds values are not used.
+        appendDirtyBits(A);
+        appendDirtyBits(B);
+
+        assertEq(A, B);
+
+        // Setting any entry to `0`, `A = B` does not hold.
+        A.set(0, i, 0);
+        assertNEq(A, B);
     }
 
     /* ------------- performance ------------- */
@@ -326,9 +364,25 @@ contract TestM32x32 is TestHelper {
         ones(128, 128);
     }
 
+    function test__perf_full_128() public pure {
+        full(128, 128, 1);
+    }
+
     function test__perf_eye_128() public pure {
         eye(128, 128);
     }
+
+    function test__perf_addScalar_128() public pure {
+        M32x32 A = zerosUnsafe(128, 128);
+
+        A.addScalar(1);
+    }
+
+    // function test__perf_mulScalar_128() public pure {
+    //     M32x32 A = zerosUnsafe(128, 128);
+
+    //     A.mulScalar(1);
+    // }
 
     function test__perf_addScalarUnchecked_128() public pure {
         M32x32 A = zerosUnsafe(128, 128);

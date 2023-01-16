@@ -128,7 +128,7 @@ contract TestUM256 is TestHelper {
 
     function test_reshape() public {
         UM256 A = range(1, 13);
-        UM256 B = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
+        UM256 B = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]);
 
         assertEq(A.reshape(4, 3), B);
         assertNEq(A.reshape(3, 4), B);
@@ -147,7 +147,7 @@ contract TestUM256 is TestHelper {
     /* ------------- conversions ------------- */
 
     function test_from() public {
-        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 A = fromArray(MATRIX_43);
         (uint256 n, uint256 m) = (4, 3);
 
         for (uint256 i; i < n; ++i) {
@@ -164,7 +164,7 @@ contract TestUM256 is TestHelper {
     }
 
     function test_from_bytes() public {
-        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 A = fromArray(MATRIX_43);
         UM256 B = from_(abi.encode(MATRIX_43), 4, 3);
 
         (uint256 nA, uint256 mA, uint256 dataA) = A.header();
@@ -179,7 +179,7 @@ contract TestUM256 is TestHelper {
     }
 
     function test_toBytes() public {
-        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 A = fromArray(MATRIX_43);
         UM256 B = from_(A._bytes(), 4, 3);
 
         // The header data should actually be equal now,
@@ -189,7 +189,7 @@ contract TestUM256 is TestHelper {
     }
 
     function test_copy() public {
-        UM256 A = fromUnsafe_(MATRIX_43);
+        UM256 A = fromArray(MATRIX_43);
         UM256 B = A.copy();
 
         assertEq(A, B);
@@ -199,7 +199,7 @@ contract TestUM256 is TestHelper {
     /* ------------- functions ------------- */
 
     function test_eq() public {
-        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 A = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
         UM256 B = A.copy();
 
         assertEq(A, B);
@@ -212,7 +212,7 @@ contract TestUM256 is TestHelper {
     }
 
     function test_sum() public {
-        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 A = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
         assertEq(A.sum(), 45);
     }
@@ -225,25 +225,25 @@ contract TestUM256 is TestHelper {
     }
 
     function test_mulScalarUnchecked() public {
-        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-        UM256 B = fromUnsafe_([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
+        UM256 A = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 B = fromArray([[2, 4, 6], [8, 10, 12], [14, 16, 18]]);
 
         assertEq(A.mulScalarUnchecked(2), B);
     }
 
     function test_dot() public {
-        UM256 A = fromUnsafe_([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-        UM256 B = fromUnsafe_([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-        UM256 C = fromUnsafe_([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
+        UM256 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        UM256 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        UM256 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
         assertEq(A.dot(B), C);
         assertNEq(B.dot(A), C);
     }
 
     function test_add() public {
-        UM256 A = fromUnsafe_([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-        UM256 B = fromUnsafe_([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
-        UM256 C = fromUnsafe_([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
+        UM256 A = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        UM256 B = fromArray([[1, 1, 1], [2, 2, 2], [3, 3, 3]]);
+        UM256 C = fromArray([[2, 3, 4], [6, 7, 8], [10, 11, 12]]);
 
         assertEq(A.add(B), C);
         assertEq(A.add(zeros(3, 3)), A);
@@ -354,15 +354,15 @@ contract TestUM256 is TestHelper {
         assertEq(v2, _MAGIC_VALUE, "Magic Value not found");
     }
 
-    function test_addScalarUnchecked_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+    function test_addScalarUnchecked_memory_safe() public testMemorySafe(fromArray(MATRIX_43)) {
         memSafeTestMat.addScalarUnchecked(1);
     }
 
-    function test_mulScalarUnchecked_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+    function test_mulScalarUnchecked_memory_safe() public testMemorySafe(fromArray(MATRIX_43)) {
         memSafeTestMat.mulScalarUnchecked(1);
     }
 
-    // function test_add_memory_safe() public testMemorySafe(fromUnsafe_(MATRIX_43)) {
+    // function test_add_memory_safe() public testMemorySafe(fromArray(MATRIX_43)) {
     //     memSafeTestMat.add(1);
     // }
 }

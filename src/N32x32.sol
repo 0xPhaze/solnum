@@ -34,7 +34,7 @@ N32x32 constant MAX_HALF = N32x32.wrap(uMAX_HALF);
 int64 constant uMIN_HALF = -0x4000000000000000;
 N32x32 constant MIN_HALF = N32x32.wrap(uMIN_HALF);
 
-uint256 constant MASK = 0xffffffffffffffff;
+uint256 constant UINT64_MAX = 0xffffffffffffffff;
 
 error N32x32_Overflow();
 error Undefined();
@@ -43,7 +43,7 @@ using {add, sub, mul, div, divUp, neg, sign, abs, eq, neq, shr, shl, lte, unwrap
 
 function safeCastToN32x32(int256 uc) pure returns (N32x32 c) {
     unchecked {
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert N32x32_Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > UINT64_MAX) revert N32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -55,7 +55,7 @@ function add(N32x32 a, N32x32 b) pure returns (N32x32 c) {
     unchecked {
         int256 uc = int256(unwrap(a)) + unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert N32x32_Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > UINT64_MAX) revert N32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -65,7 +65,7 @@ function sub(N32x32 a, N32x32 b) pure returns (N32x32 c) {
     unchecked {
         int256 uc = int256(unwrap(a)) - unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert N32x32_Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > UINT64_MAX) revert N32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -75,7 +75,7 @@ function mul(N32x32 a, N32x32 b) pure returns (N32x32 c) {
     unchecked {
         int256 uc = (int256(unwrap(a)) * unwrap(b)) >> 32;
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert N32x32_Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > UINT64_MAX) revert N32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -85,7 +85,7 @@ function div(N32x32 a, N32x32 b) pure returns (N32x32 c) {
     unchecked {
         int256 uc = (int256(unwrap(a)) << 32) / unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert N32x32_Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > UINT64_MAX) revert N32x32_Overflow();
 
         c = wrap(int64(uc));
     }
@@ -95,7 +95,7 @@ function divUp(N32x32 a, N32x32 b) pure returns (N32x32 c) {
     unchecked {
         int256 uc = ((int256(unwrap(a)) << 32) + unwrap(b) - 1) / unwrap(b);
 
-        if (uint256(uc) - uint256(int256(uMIN)) > MASK) revert N32x32_Overflow();
+        if (uint256(uc) - uint256(int256(uMIN)) > UINT64_MAX) revert N32x32_Overflow();
 
         c = wrap(int64(uc));
     }

@@ -54,6 +54,13 @@ function malloc(uint256 size) pure returns (uint256 ptr) {
     }
 }
 
+function mcopy(uint256 fromPtr, uint256 toPtr, uint256 size) view {
+    assembly {
+        // Use `address(4)` precompile to copy memory data.
+        pop(staticcall(gas(), 4, fromPtr, size, toPtr, size))
+    }
+}
+
 /* ------------- header ------------- */
 
 struct UM256HeaderStruct {
@@ -130,8 +137,7 @@ function zerosUnsafe(uint256 n, uint256 m) pure returns (UM256 A) {
         uint256 ptr = malloc(32 + size);
 
         assembly {
-            // Store the bytes size.
-            mstore(ptr, size)
+            mstore(ptr, size) // Store the bytes size.
         }
 
         // Generate metadata header, skip the 32 bytes length.
@@ -140,70 +146,38 @@ function zerosUnsafe(uint256 n, uint256 m) pure returns (UM256 A) {
     }
 }
 
-function zeros(uint256 n, uint256 m) pure returns (UM256 A) {
-    unchecked {
-        // Memory size in bytes.
-        uint256 size = n * m * 32;
-        // Allocate memory space for matrix.
-        // Add 32 bytes to store the byte size.
-        uint256 ptr = malloc(32 + size);
+function zeros(uint256 n, uint256 m) pure returns (UM256 C) {
+    // We can unsafely allocate a new matrix,
+    // because we will write to all memory slots.
+    C = zerosUnsafe(n, m);
 
-        assembly {
-            // Store the bytes size.
-            mstore(ptr, size)
-        }
-
-        // Skip the 32 bytes length.
-        ptr = ptr + 32;
-
-        // Generate metadata header.
-        A = UM256Header(ptr, n, m);
-
-        // Loop over n * m elements * 32 bytes.
-        uint256 end = ptr + n * m * 32;
-
-        while (ptr != end) {
-            assembly {
-                mstore(ptr, 0) // Store `0` at current pointer location.
-            }
-
-            ptr = ptr + 32; // Advance pointer to next slot.
-        }
-    }
+    // Fill matrix with `0`.
+    fill_(C, 0);
 }
 
-function ones(uint256 n, uint256 m) pure returns (UM256 A) {
-    unchecked {
-        // We can unsafely allocate a new matrix,
-        // because we will write to all memory slots.
-        A = zerosUnsafe(n, m);
+function ones(uint256 n, uint256 m) pure returns (UM256 C) {
+    // We can unsafely allocate a new matrix,
+    // because we will write to all memory slots.
+    C = zerosUnsafe(n, m);
 
-        // Obtain a reference to matrix data location.
-        uint256 ptr = ref(A);
-
-        // Loop over n * m elements * 32 bytes.
-        uint256 end = ptr + n * m * 32;
-
-        while (ptr != end) {
-            assembly {
-                mstore(ptr, 1) // Store `1` at current pointer location.
-            }
-
-            ptr = ptr + 32; // Advance pointer to next slot.
-        }
-    }
+    // Fill matrix with `1`.
+    fill_(C, 1);
 }
 
-function eye(uint256 n, uint256 m) pure returns (UM256 A) {
+function eye(uint256 n, uint256 m) pure returns (UM256 C) {
     unchecked {
-        // Only supporting square dimensions.
+        // Only allowing square dimensions.
         if (n != m) revert UM256_InvalidDimensions();
 
-        // Allocate a new matrix of zeros.
-        A = zeros(n, m);
+        // We can unsafely allocate a new matrix,
+        // because we will write to all memory slots.
+        C = zerosUnsafe(n, m);
 
-        // Obtain a reference to matrix data location.
-        uint256 ptr = ref(A);
+        // Fill matrix with `0`.
+        fill_(C, 0);
+
+        // Obtain a pointer to matrix data location.
+        uint256 ptr = ref(C);
         // Spacing in memory between the elements on the diagonal.
         uint256 diagSpace = 32 + n * 32;
         // Loop over n diagonal elements.
@@ -214,7 +188,7 @@ function eye(uint256 n, uint256 m) pure returns (UM256 A) {
                 mstore(ptr, 1) // Store `1` at current pointer location.
             }
 
-            ptr = ptr + diagSpace; // Advance pointer to next slot in the diagonal.
+            ptr = ptr + diagSpace; // Advance pointer to the next slot in the diagonal.
         }
     }
 }
@@ -230,7 +204,7 @@ function range(uint256 start, uint256 end) pure returns (UM256 A) {
         // because we will write to all memory slots.
         A = zerosUnsafe(1, numEl);
 
-        // Obtain a reference to matrix data location.
+        // Obtain a pointer to matrix data location.
         uint256 ptr = ref(A);
 
         uint256 a = start;
@@ -241,7 +215,7 @@ function range(uint256 start, uint256 end) pure returns (UM256 A) {
                 mstore(ptr, a) // Store `a` at current pointer location.
             }
 
-            ptr = ptr + 32; // Advance pointer to next slot in the diagonal.
+            ptr = ptr + 32; // Advance pointer to the next slot.
             a = a + 1;
         }
     }
@@ -330,18 +304,21 @@ function add(UM256 A, UM256 B) pure returns (UM256 C) {
 
         C = zerosUnsafe(nA, mA);
 
+        // Loop over all `n * m` elements of 32 bytes size.
         uint256 endA = ptrA + nA * mA * 32;
         uint256 ptrC = ref(C);
 
+        // Loop over 32 byte words.
         while (ptrA != endA) {
             assembly {
                 let a := mload(ptrA)
                 let b := mload(ptrB)
                 let c := add(a, b)
 
-                mstore(ptrC, c)
+                mstore(ptrC, c) // Store result in `C`.
             }
 
+            // Advance pointers to the next slot.
             ptrA = ptrA + 32;
             ptrB = ptrB + 32;
             ptrC = ptrC + 32;
@@ -356,9 +333,6 @@ function add(UM256 A, UM256 B) pure returns (UM256 C) {
 /// of the elements in `A`, `B` to be summed are:
 /// `ptrA = 32 * (k + i * mA)`
 /// `ptrB = 32 * (j + k * mb)`
-///
-/// However, it's cheaper to not keep track of `i`, `j`, `k`,
-/// but to keep running pointers to the elements of the matrix.
 function dot(UM256 A, UM256 B) pure returns (UM256 C) {
     unchecked {
         (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
@@ -397,6 +371,7 @@ function dot(UM256 A, UM256 B) pure returns (UM256 C) {
                 // Store the result in `c`.
                 uint256 c;
 
+                // Loop over 32 byte words.
                 while (ptrA != ptrAInnerEnd) {
                     // k-loop start.
 
@@ -432,16 +407,20 @@ function eq(UM256 A, UM256 B) pure returns (bool equals) {
         (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         equals = nA == nB && mA == mB;
+
+        // Loop over all `n * m` elements of 32 bytes size.
         uint256 endA = ptrA + nA * mA * 32;
 
+        // Loop over 32 byte words.
         while (ptrA != endA && equals) {
             assembly {
                 let a := mload(ptrA)
                 let b := mload(ptrB)
 
-                equals := eq(a, b)
+                equals := eq(a, b) // Check whether `a == b`.
             }
 
+            // Advance pointers to the next slot.
             ptrA = ptrA + 32;
             ptrB = ptrB + 32;
         }
@@ -452,22 +431,23 @@ function eq(UM256 A, UM256 B) pure returns (bool equals) {
 
 function addScalarUnchecked(UM256 A, uint256 s) pure returns (UM256 C) {
     unchecked {
-        (uint256 n, uint256 m, uint256 ptr) = header(A);
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
         C = zerosUnsafe(n, m);
 
-        uint256 ptrA = ptr;
+        // Loop over all `n * m` elements of 32 bytes size.
         uint256 endA = ptrA + n * m * 32;
         uint256 ptrC = ref(C);
 
         while (ptrA != endA) {
             assembly {
-                let a := mload(ptrA)
-                let c := add(a, s)
+                let a := mload(ptrA) // Load value at `ptr`.
+                let c := add(a, s) // Add value to `s`.
 
-                mstore(ptrC, c)
+                mstore(ptrC, c) // Store result `c` in `ptrC`.
             }
 
+            // Advance pointers to the next slot.
             ptrA = ptrA + 32;
             ptrC = ptrC + 32;
         }
@@ -492,6 +472,7 @@ function mulScalarUnchecked(UM256 A, uint256 s) pure returns (UM256 C) {
                 mstore(ptrC, c)
             }
 
+            // Advance pointers to the next slot.
             ptrA = ptrA + 32;
             ptrC = ptrC + 32;
         }
@@ -504,15 +485,15 @@ function sum(UM256 A) pure returns (uint256 s) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        uint256 ptrA = ptr;
-        uint256 endA = ptrA + n * m * 32;
+        // Loop over all `n * m` elements of 32 bytes size.
+        uint256 end = ptr + n * m * 32;
 
-        while (ptrA != endA) {
+        while (ptr != end) {
             assembly {
-                s := add(s, mload(ptrA))
+                s := add(s, mload(ptr)) // Load element at `ptr` and add to `s`.
             }
 
-            ptrA = ptrA + 32;
+            ptr = ptr + 32; // Advance pointer to the next slot.
         }
     }
 }
@@ -523,26 +504,35 @@ function eqScalar(UM256 A, uint256 value) pure returns (bool equals) {
 
         equals = true;
 
-        uint256 ptrA = ptr;
-        uint256 endA = ptrA + n * m * 32;
+        // Loop over all `n * m` elements of 32 bytes size.
+        uint256 end = ptr + n * m * 32;
 
-        while (ptrA != endA) {
+        while (ptr != end) {
             assembly {
-                equals := eq(mload(ptrA), value)
+                // Load element at `ptr` and compare to `value`.
+                equals := eq(mload(ptr), value)
             }
 
-            if (!equals) break;
+            if (!equals) break; // Exit early.
 
-            ptrA = ptrA + 32;
+            ptr = ptr + 32; // Advance pointer to the next slot.
         }
     }
+}
+
+function full(uint256 n, uint256 m, uint256 s) pure returns (UM256 C) {
+    // We can unsafely allocate a new matrix,
+    // because we will write to all memory slots.
+    C = zerosUnsafe(n, m);
+
+    fill_(C, s); // Fill matrix with `s`.
 }
 
 function fill_(UM256 A, uint256 a) pure {
     unchecked {
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
-        // Loop over n * m elements of 8 bytes.
+        // Loop over n * m elements of 32 bytes.
         uint256 end = ptr + n * m * 32;
 
         while (ptr != end) {
@@ -550,25 +540,24 @@ function fill_(UM256 A, uint256 a) pure {
                 mstore(ptr, a) // Store `a` at current pointer location.
             }
 
-            ptr = ptr + 32; // Advance pointer to next slot.
+            ptr = ptr + 32; // Advance pointer to the next slot.
         }
     }
 }
 
 /* ------------- conversions ------------- */
 
-function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256 A) {
+function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256 C) {
     unchecked {
         if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
         uint256 ptr;
 
         assembly {
-            // Actual data is located after length encoding.
-            ptr := add(32, dataBytes)
+            ptr := add(32, dataBytes) // Actual data is located after length encoding.
         }
 
-        A = UM256Header(ptr, n, m);
+        C = UM256Header(ptr, n, m);
     }
 }
 
@@ -583,50 +572,48 @@ function _bytes(UM256 A) pure returns (bytes memory dataBytes) {
 }
 
 /// @dev todo: compare gas costs to manual copy
-function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (UM256 A) {
+function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (UM256 C) {
     unchecked {
         if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
         uint256 size = n * m * 32;
-        uint256 ptr = malloc(32 + size);
+        uint256 ptrC = malloc(32 + size);
+        uint256 ptrA;
 
         assembly {
-            // Store bytes size.
-            mstore(ptr, size)
-            // Actual data will be stored in next mem slot.
-            ptr := add(ptr, 32)
-            // Use `address(4)` precompile to copy memory data `dataBytes` to `ptr`.
-            pop(staticcall(gas(), 4, add(32, dataBytes), mload(dataBytes), ptr, size))
+            mstore(ptrC, size) // Store bytes size.
+            ptrA := dataBytes // Get a pointer to `dataBytes` memory location.
         }
 
-        A = UM256Header(ptr, n, m);
+        ptrC = ptrC + 32; // Actual data will be stored in next mem slot.
+        mcopy(ptrA, ptrC, size); // Copy data from `ptrA` to `ptrC`.
+
+        C = UM256Header(ptrC, n, m);
     }
 }
 
-function copy(UM256 A) view returns (UM256 B) {
+function copy(UM256 A) view returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
         uint256 size = n * m * 32;
-        uint256 ptrB = malloc(32 + size);
+        uint256 ptrC = malloc(32 + size);
 
         assembly {
-            // Store bytes size.
-            mstore(ptrB, size)
-            // Actual data will be stored in next mem slot.
-            ptrB := add(ptrB, 32)
-            // Use `address(4)` precompile to copy memory data `ptrA` to `ptrB`.
-            pop(staticcall(gas(), 4, ptrA, size, ptrB, size))
+            mstore(ptrC, size) // Store bytes size.
         }
 
-        B = UM256Header(ptrB, n, m);
+        ptrC = ptrC + 32; // Actual data will be stored in next mem slot.
+        mcopy(ptrA, ptrC, size); // Copy data from `ptrA` to `ptrC`.
+
+        C = UM256Header(ptrC, n, m);
     }
 }
 
 /* ------------- unsafe conversions ------------- */
 
-/// @dev `data` needs to be contiguous in memory.
-function fromUnsafe_(uint8[3][4] memory data) pure returns (UM256 A) {
+/// @dev Requires `data` to be contiguous in memory.
+function fromArray(uint8[3][4] memory data) pure returns (UM256 A) {
     uint256 ptr;
 
     assembly {
@@ -643,7 +630,7 @@ function fromUnsafe_(uint8[3][4] memory data) pure returns (UM256 A) {
     A = UM256Header(ptr, 4, 3);
 }
 
-function fromUnsafe_(uint8[3][3] memory data) pure returns (UM256 A) {
+function fromArray(uint8[3][3] memory data) pure returns (UM256 A) {
     uint256 ptr;
 
     assembly {

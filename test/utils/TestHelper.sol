@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {N32x32} from "src/N32x32.sol";
+import {N32x32, UINT64_MAX} from "src/N32x32.sol";
 import {M32x32} from "src/M32x32.sol";
 import {UM256} from "src/UM256.sol";
 
@@ -239,6 +239,17 @@ contract TestHelper is Test {
         }
 
         assertEq(value, _MAGIC_VALUE, "Magic Value not found");
+    }
+
+    function appendDirtyBits(M32x32 A) internal pure {
+        uint256 len = A.length();
+        uint256 lenUp = ((len * 8 + 31) & ~uint256(31)) / 8;
+
+        while (lenUp != len) {
+            A.setUnsafe(0, lenUp - 1, UINT64_MAX);
+
+            lenUp -= 1;
+        }
     }
 
     /* ------------- log ------------- */
