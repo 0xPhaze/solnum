@@ -238,12 +238,26 @@ contract TestUM256 is TestHelper {
 
         assertEq(A.dot(B), C);
         assertNEq(B.dot(A), C);
+
+        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
+        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+
+        assertEq(A.dot(B), C);
+        assertNEq(B.dot(A), C);
     }
 
     function test_dotTransposed() public {
         UM256 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
         UM256 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
         UM256 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+
+        assertEq(A.dotTransposed(B), C);
+        assertNEq(B.dotTransposed(A), C);
+
+        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
+        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
         assertEq(A.dotTransposed(B), C);
         assertNEq(B.dotTransposed(A), C);

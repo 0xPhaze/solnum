@@ -36,6 +36,7 @@ using {
     mulScalarUncheckedTo_,
     add,
     dot,
+    dotTransposed,
     eq,
     eqScalar,
     sum
@@ -456,29 +457,29 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
         C = mallocM32x32(nA, mB);
 
-        uint256 ptrC = ref(C);
+        uint256 ptrCij = ref(C);
 
         uint256 ptrARowSize = 8 * mA;
         uint256 ptrBRowSize = 8 * mB;
 
-        uint256 ptrARowEnd = dataPtrA + 8 * nA * mA;
-        uint256 ptrARow = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
+        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
 
-        uint256 ptrBColEnd = dataPtrB + ptrBRowSize;
-        uint256 ptrBCol;
+        uint256 ptrBjEnd = dataPtrB + ptrBRowSize;
+        uint256 ptrBj;
 
-        // Loop over all `C`s `i` indices.
-        while (ptrARow != ptrARowEnd) {
+        // Loop over `C`s `i` indices.
+        while (ptrAi != ptrAiEnd) {
             // i-loop start.
 
-            ptrBCol = dataPtrB;
+            ptrBj = dataPtrB;
 
-            while (ptrBCol != ptrBColEnd) {
+            while (ptrBj != ptrBjEnd) {
                 // j-loop start.
 
-                uint256 ptrB = ptrBCol;
-                uint256 ptrA = ptrARow;
-                uint256 ptrAInnerEnd = ptrARow + ptrARowSize;
+                uint256 ptrBkj = ptrBj;
+                uint256 ptrAik = ptrAi;
+                uint256 ptrAikEnd = ptrAi + ptrARowSize;
 
                 // Perform the dot product on the current
                 // row vector of `A` and the column vector of `B`.
@@ -486,12 +487,12 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 uint256 c;
 
                 // Loop over 32 byte words.
-                while (ptrA != ptrAInnerEnd) {
+                while (ptrAik != ptrAikEnd) {
                     // k-loop start.
 
                     assembly {
-                        let a := mload(ptrA) // Load A[i,k].
-                        let b := mload(ptrB) // Load B[k,j].
+                        let a := mload(ptrAik) // Load A[i,k].
+                        let b := mload(ptrBkj) // Load B[k,j].
 
                         // c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
 
@@ -508,8 +509,8 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                         // overflow := or(overflow, add(s, OVERFLOW_CHECK_INT64))
                     }
 
-                    ptrA = ptrA + 32; // Loop over all `A`s columns.
-                    ptrB = ptrB + ptrBRowSize; // Loop over all `B`s rows.
+                    ptrAik = ptrAik + 32; // Advance to the next column of `A`.
+                    ptrBkj = ptrBkj + ptrBRowSize; // Advance to the next row of `B`.
                 }
 
                 // // Loop over 32 byte words.
@@ -534,14 +535,92 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 // }
 
                 assembly {
-                    mstore(ptrC, c) // Store the result in C[i,j].
+                    mstore(ptrCij, c) // Store the result in C[i,j].
                 }
 
-                ptrC = ptrC + 32; // Advance to the next element of `C`.
-                ptrBCol = ptrBCol + 32; // Advance to the next column of `B`.
+                ptrCij = ptrCij + 32; // Advance to the next element of `C`.
+                ptrBj = ptrBj + 32; // Advance to the next column of `B`.
             }
 
-            ptrARow = ptrARow + ptrARowSize; // Advance to the next row of `A`.
+            ptrAi = ptrAi + ptrARowSize; // Advance to the next row of `A`.
+        }
+    }
+}
+
+/// @dev Computes `C_ij = A_ik B_jk`
+function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
+    unchecked {
+        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+
+        if (mA != mB) revert M32x32_IncompatibleDimensions();
+
+        C = mallocM32x32(nA, nB);
+
+        uint256 ptrCij = ref(C);
+
+        uint256 ptrARowSize = 8 * mA;
+        uint256 ptrBRowSize = 8 * mB;
+
+        uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
+        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
+
+        uint256 ptrBjEnd = dataPtrB + 8 * nB * mB;
+        uint256 ptrBj;
+
+        // Loop over `C`s `i` indices.
+        while (ptrAi != ptrAiEnd) {
+            // i-loop start.
+
+            ptrBj = dataPtrB;
+
+            while (ptrBj != ptrBjEnd) {
+                // j-loop start.
+
+                uint256 ptrBjk = ptrBj;
+                uint256 ptrAik = ptrAi;
+                // End inner loop after one row of `A`.
+                uint256 ptrAikEnd = ptrAi + ptrARowSize;
+
+                // Perform the dot product on the current
+                // row vector of `A` and the column vector of `B`.
+                // Store the result in `c`.
+                uint256 c;
+
+                // Loop over 32 byte words.
+                while (ptrAik != ptrAikEnd) {
+                    // k-loop start.
+
+                    assembly {
+                        let a := mload(ptrAik) // Load A[i,k].
+                        let b := mload(ptrBjk) // Load B[j,k].
+
+                        let s
+                        s := mul(and(a, _UINT64_MAX), and(b, _UINT64_MAX))
+                        c := add(c, s)
+                        s := mul(and(shr(64, a), _UINT64_MAX), and(shr(64, b), _UINT64_MAX))
+                        c := add(c, s)
+                        s := mul(and(shr(128, a), _UINT64_MAX), and(shr(128, b), _UINT64_MAX))
+                        c := add(c, s)
+                        s := mul(shr(192, a), shr(192, b))
+                        c := add(c, s)
+
+                        // c := add(c, mul(a, b)) // Add the product `a * b` to `c`.
+                    }
+
+                    ptrAik = ptrAik + 32; // Loop over `A`s columns.
+                    ptrBjk = ptrBjk + 32; // Loop over `B`s columns.
+                }
+
+                assembly {
+                    mstore(ptrCij, c) // Store the result in C[i,j].
+                }
+
+                ptrCij = ptrCij + 32; // Advance to the next element of `C`.
+                ptrBj = ptrBj + ptrBRowSize; // Advance to the next row of `B`.
+            }
+
+            ptrAi = ptrAi + ptrARowSize; // Advance to the next row of `A`.
         }
     }
 }
@@ -904,9 +983,7 @@ function eqScalar(M32x32 A, uint256 value) pure returns (bool equals) {
         while (ptr != end) {
             assembly {
                 // Load packed elements at `ptr` and compare to `value`.
-                let a := mload(ptr)
-
-                equals := eq(a, valueX4)
+                equals := eq(mload(ptr), valueX4)
             }
 
             if (!equals) break; // Exit early.
@@ -963,13 +1040,13 @@ function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (M32x3
     unchecked {
         if (n * m * 8 > dataBytes.length) revert M32x32_TooLarge();
 
-        uint256 ptr;
+        uint256 dataPtr;
 
         assembly {
-            ptr := add(32, dataBytes) // Actual data is located after length encoding.
+            dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
         }
 
-        C = M32x32Header(ptr, n, m);
+        C = M32x32Header(dataPtr, n, m);
     }
 }
 
@@ -987,19 +1064,15 @@ function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (M32x32
     unchecked {
         if (n * m * 8 > dataBytes.length) revert M32x32_TooLarge();
 
-        uint256 size = n * m * 8;
-        uint256 ptrC = UM256Lib.malloc(32 + size);
-        uint256 ptrA;
+        uint256 dataPtr;
 
         assembly {
-            mstore(ptrC, size) // Store bytes size.
-            ptrA := dataBytes // Get a pointer to `dataBytes` memory location.
+            dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
         }
 
-        ptrC = ptrC + 32; // Actual data will be stored in next mem slot.
-        UM256Lib.mcopy(ptrA, ptrC, size); // Copy data from `ptrA` to `ptrC`.
+        C = mallocM32x32(n, m); // Allocate memory for matrix.
 
-        C = M32x32Header(ptrC, n, m);
+        UM256Lib.mcopy(dataPtr, ref(C), n * m * 8); // Copy data from `ptrA` to `ptrC`.
     }
 }
 
@@ -1007,17 +1080,9 @@ function copy(M32x32 A) view returns (M32x32 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
-        uint256 size = n * m * 8;
-        uint256 ptrC = UM256Lib.malloc(32 + size);
+        C = mallocM32x32(n, m); // Allocate memory for matrix.
 
-        assembly {
-            mstore(ptrC, size) // Store bytes size.
-        }
-
-        ptrC = ptrC + 32; // Actual data will be stored in next mem slot.
-        UM256Lib.mcopy(ptrA, ptrC, size); // Copy data from `ptrA` to `ptrC`.
-
-        C = M32x32Header(ptrC, n, m);
+        UM256Lib.mcopy(ptrA, ref(C), n * m * 8); // Copy data from `ptrA` to `ptrC`.
     }
 }
 
@@ -1034,6 +1099,8 @@ function fromArray(uint8[3][3] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
+    C = mallocM32x32(3, 3); // Allocate memory for matrix.
+
     // Add scalar `A` and `B`, store result in `C`.
     copyFromUint256PtrToUnsafe_(ptr, 3, 3, C);
 }
@@ -1045,7 +1112,9 @@ function fromArray(uint8[4][2] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
-    copyFromUint256PtrToUnsafe_(ptr, 2, 4, C = mallocM32x32(2, 4));
+    C = mallocM32x32(2, 4); // Allocate memory for matrix.
+
+    copyFromUint256PtrToUnsafe_(ptr, 2, 4, C);
 }
 
 function fromArray(uint8[4][4] memory data) pure returns (M32x32 C) {
@@ -1055,7 +1124,9 @@ function fromArray(uint8[4][4] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
-    copyFromUint256PtrToUnsafe_(ptr, 4, 4, C = mallocM32x32(4, 4));
+    C = mallocM32x32(4, 4); // Allocate memory for matrix.
+
+    copyFromUint256PtrToUnsafe_(ptr, 4, 4, C);
 }
 
 function fromArray(uint256[2][2] memory data) pure returns (M32x32 C) {
@@ -1065,7 +1136,9 @@ function fromArray(uint256[2][2] memory data) pure returns (M32x32 C) {
         ptr := mload(data)
     }
 
-    copyFromUint256PtrToUnsafe_(ptr, 2, 2, C = mallocM32x32(2, 2));
+    C = mallocM32x32(2, 2); // Allocate memory for matrix.
+
+    copyFromUint256PtrToUnsafe_(ptr, 2, 2, C);
 }
 
 function copyFromUint256PtrToUnsafe_(uint256 ptr, uint256 n, uint256 m, M32x32 C) pure {

@@ -611,13 +611,13 @@ function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256
     unchecked {
         if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
-        uint256 ptr;
+        uint256 dataPtr;
 
         assembly {
-            ptr := add(32, dataBytes) // Actual data is located after length encoding.
+            dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
         }
 
-        C = UM256Header(ptr, n, m);
+        C = UM256Header(dataPtr, n, m);
     }
 }
 
@@ -631,24 +631,19 @@ function _bytes(UM256 A) pure returns (bytes memory dataBytes) {
     }
 }
 
-/// @dev todo: compare gas costs to manual copy
 function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (UM256 C) {
     unchecked {
         if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
-        uint256 size = n * m * 32;
-        uint256 ptrC = malloc(32 + size);
-        uint256 ptrA;
+        uint256 dataPtr;
 
         assembly {
-            mstore(ptrC, size) // Store bytes size.
-            ptrA := dataBytes // Get a pointer to `dataBytes` memory location.
+            dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
         }
 
-        ptrC = ptrC + 32; // Actual data will be stored in next mem slot.
-        mcopy(ptrA, ptrC, size); // Copy data from `ptrA` to `ptrC`.
+        C = mallocUM256(n, m); // Allocate memory for matrix.
 
-        C = UM256Header(ptrC, n, m);
+        mcopy(dataPtr, ref(C), n * m * 32); // Copy bytes from `ptrA` to `C`.
     }
 }
 
@@ -656,46 +651,49 @@ function copy(UM256 A) view returns (UM256 C) {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
-        uint256 size = n * m * 32;
-        uint256 ptrC = malloc(32 + size);
+        C = mallocUM256(n, m); // Allocate memory for matrix.
 
-        assembly {
-            mstore(ptrC, size) // Store bytes size.
-        }
-
-        ptrC = ptrC + 32; // Actual data will be stored in next mem slot.
-        mcopy(ptrA, ptrC, size); // Copy data from `ptrA` to `ptrC`.
-
-        C = UM256Header(ptrC, n, m);
+        mcopy(ptrA, ref(C), n * m * 32); // Copy bytes from `ptrA` to `C`.
     }
 }
 
 /* ------------- unsafe conversions ------------- */
 
-/// @dev Requires `data` to be contiguous in memory.
-function fromArray(uint8[3][4] memory data) pure returns (UM256 A) {
-    uint256 ptr;
+function fromArray(uint8[3][4] memory data) view returns (UM256 C) {
+    uint256 dataPtr;
 
     assembly {
         // Making a big assumption here that `data` uint8[3] entries
         // are laid out contiguously in memory right after the pointers.
-        ptr := mload(data)
-        // Store data bytes length in position `ptr - 32`.
-        // This allows to easily retrieve the underlying data as bytes,
-        // but "destroys" the original `uint8[3][4] memory data` and
-        // it should not be used afterwards.
-        mstore(sub(ptr, 32), 384)
+        // todo: fix this.
+        dataPtr := mload(data)
     }
 
-    A = UM256Header(ptr, 4, 3);
+    C = mallocUM256(4, 3); // Allocate memory for matrix.
+
+    mcopy(dataPtr, ref(C), 4 * 3 * 32); // Copy bytes from `dataPtr` to `C`.
 }
 
-function fromArray(uint8[3][3] memory data) pure returns (UM256 A) {
-    uint256 ptr;
+function fromArray(uint8[3][3] memory data) view returns (UM256 C) {
+    uint256 dataPtr;
 
     assembly {
-        ptr := mload(data)
+        dataPtr := mload(data)
     }
 
-    A = UM256Header(ptr, 3, 3);
+    C = mallocUM256(3, 3); // Allocate memory for matrix.
+
+    mcopy(dataPtr, ref(C), 3 * 3 * 32); // Copy bytes from `dataPtr` to `C`.
+}
+
+function fromArray(uint8[4][4] memory data) view returns (UM256 C) {
+    uint256 dataPtr;
+
+    assembly {
+        dataPtr := mload(data)
+    }
+
+    C = mallocUM256(4, 4); // Allocate memory for matrix.
+
+    mcopy(dataPtr, ref(C), 4 * 4 * 32); // Copy bytes from `dataPtr` to `C`.
 }
