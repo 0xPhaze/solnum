@@ -324,6 +324,27 @@ contract TestUM256 is TestHelper {
         A.add(B);
     }
 
+    function test__perf_dot_16() public pure {
+        UM256 A = mallocUM256(16, 16);
+        UM256 B = mallocUM256(16, 16);
+
+        A.dot(B);
+    }
+
+    function test__perf_dot_32() public pure {
+        UM256 A = mallocUM256(32, 32);
+        UM256 B = mallocUM256(32, 32);
+
+        A.dot(B);
+    }
+
+    function test__perf_dot_64() public pure {
+        UM256 A = mallocUM256(64, 64);
+        UM256 B = mallocUM256(64, 64);
+
+        A.dot(B);
+    }
+
     function test__perf_dot_128() public pure {
         UM256 A = mallocUM256(128, 128);
         UM256 B = mallocUM256(128, 128);

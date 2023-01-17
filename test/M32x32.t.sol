@@ -240,30 +240,36 @@ contract TestM32x32 is TestHelper {
         // M32x32 A = range(1, 9).reshape(2, 4);
         // M32x32 B = range(10, 18).reshape(4, 2);
         // M32x32 C = fromArray([[uint256(130), 140], [uint256(322), 348]]);
+        M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        M32x32 B = fromArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
+        M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
-        M32x32 A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-        M32x32 B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
-        M32x32 C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+        assertEq(A.dot(B), C);
+        assertNEq(B.dot(A), C);
+
+        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
+        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
         // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
         // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
         // M32x32 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
         assertEq(A.dot(B), C);
-        // assertNEq(B.dot(A), C);
+        assertNEq(B.dot(A), C);
     }
 
     function test_dotTransposed() public {
-        // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-        // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-        // M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+        M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
-        // assertEq(A.dotTransposed(B), C);
-        // assertNEq(B.dotTransposed(A), C);
+        assertEq(A.dotTransposed(B), C);
+        assertNEq(B.dotTransposed(A), C);
 
-        M32x32 A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-        M32x32 B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
-        M32x32 C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
+        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
         assertEq(A.dotTransposed(B), C);
         assertNEq(B.dotTransposed(A), C);
@@ -448,7 +454,28 @@ contract TestM32x32 is TestHelper {
         A.addUnchecked(B);
     }
 
-    function test__perf_dot_128() public {
+    function test__perf_dot_16() public pure {
+        M32x32 A = mallocM32x32(16, 16);
+        M32x32 B = mallocM32x32(16, 16);
+
+        A.dot(B);
+    }
+
+    function test__perf_dot_32() public pure {
+        M32x32 A = mallocM32x32(32, 32);
+        M32x32 B = mallocM32x32(32, 32);
+
+        A.dot(B);
+    }
+
+    function test__perf_dot_64() public pure {
+        M32x32 A = mallocM32x32(64, 64);
+        M32x32 B = mallocM32x32(64, 64);
+
+        A.dot(B);
+    }
+
+    function test__perf_dot_128() public pure {
         M32x32 A = mallocM32x32(128, 128);
         M32x32 B = mallocM32x32(128, 128);
 
