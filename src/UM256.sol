@@ -607,7 +607,7 @@ function fill_(UM256 A, uint256 a) pure {
 
 /* ------------- conversions ------------- */
 
-function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256 C) {
+function fromBytes_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256 C) {
     unchecked {
         if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
@@ -621,17 +621,7 @@ function from_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (UM256
     }
 }
 
-function _bytes(UM256 A) pure returns (bytes memory dataBytes) {
-    uint256 ptr = ref(A);
-
-    assembly {
-        // This only works under the assumption that
-        // we always store the size in bytes before the data.
-        dataBytes := sub(ptr, 32)
-    }
-}
-
-function from(bytes memory dataBytes, uint256 n, uint256 m) view returns (UM256 C) {
+function fromBytes(bytes memory dataBytes, uint256 n, uint256 m) view returns (UM256 C) {
     unchecked {
         if (n * m * 32 > dataBytes.length) revert UM256_TooLarge();
 
@@ -654,6 +644,16 @@ function copy(UM256 A) view returns (UM256 C) {
         C = mallocUM256(n, m); // Allocate memory for matrix.
 
         mcopy(ptrA, ref(C), n * m * 32); // Copy bytes from `ptrA` to `C`.
+    }
+}
+
+function _bytes(UM256 A) pure returns (bytes memory dataBytes) {
+    uint256 ptr = ref(A);
+
+    assembly {
+        // This only works under the assumption that
+        // we always store the size in bytes before the data.
+        dataBytes := sub(ptr, 32)
     }
 }
 

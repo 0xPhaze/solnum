@@ -146,7 +146,7 @@ contract TestUM256 is TestHelper {
 
     /* ------------- conversions ------------- */
 
-    function test_from() public {
+    function test_fromArray() public {
         UM256 A = fromArray(MATRIX_43);
         (uint256 n, uint256 m) = (4, 3);
 
@@ -163,9 +163,9 @@ contract TestUM256 is TestHelper {
         assertTrue(dataA != 0);
     }
 
-    function test_from_bytes() public {
+    function test_fromBytes() public {
         UM256 A = fromArray(MATRIX_43);
-        UM256 B = from_(abi.encode(MATRIX_43), 4, 3);
+        UM256 B = fromBytes(abi.encode(MATRIX_43), 4, 3);
 
         (uint256 nA, uint256 mA, uint256 dataA) = A.header();
         (uint256 nB, uint256 mB, uint256 dataB) = B.header();
@@ -180,11 +180,13 @@ contract TestUM256 is TestHelper {
 
     function test_toBytes() public {
         UM256 A = fromArray(MATRIX_43);
-        UM256 B = from_(A._bytes(), 4, 3);
+        UM256 B = fromBytes(A._bytes(), 4, 3);
 
+        assertEq(A, B);
+
+        B = fromBytes_(A._bytes(), 4, 3);
         // The header data should actually be equal now,
         // because we're referencing the same underlying data.
-        assertEq(B._bytes().length, 4 * 3 * 32);
         assertEq(UM256.unwrap(A), UM256.unwrap(B));
     }
 

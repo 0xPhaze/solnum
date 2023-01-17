@@ -237,12 +237,34 @@ contract TestM32x32 is TestHelper {
     }
 
     function test_dot() public {
-        // M32x32 A = range(1, 9).reshape(2, 4);
-        // M32x32 B = range(10, 18).reshape(4, 2);
-        // M32x32 C = fromArray([[uint256(130), 140], [uint256(322), 348]]);
-        M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-        M32x32 B = fromArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
-        M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+        M32x32 A;
+        M32x32 B;
+        M32x32 C;
+
+        // A = fromArray([[1]]);
+        // assertEq(A.dot(A), 1);
+
+        // A = fromArray([[1, 2]]);
+        // assertEq(A.dot(A), 1);
+
+        A = range(1, 2);
+        assertEq(A.dot(A.transposed()), 1);
+        A = range(1, 3);
+        assertEq(A.dot(A.transposed()), 5);
+        A = range(1, 4);
+        assertEq(A.dot(A.transposed()), 14);
+        A = range(1, 5);
+        assertEq(A.dot(A.transposed()), 30);
+        A = range(1, 6);
+        assertEq(A.dot(A.transposed()), 55);
+        A = range(1, 7);
+        assertEq(A.dot(A.transposed()), 91);
+        A = range(1, 8);
+        assertEq(A.dot(A.transposed()), 140);
+
+        A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        B = fromArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
+        C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
         assertEq(A.dot(B), C);
         assertNEq(B.dot(A), C);
