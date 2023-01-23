@@ -126,28 +126,48 @@ contract TestHelper is Test {
     /* ------------- UM256 ------------- */
 
     function assertEq(UM256 A, uint256 s) internal {
-        if (!A.eqScalar(s)) {
-            emit log("Error: A == B not satisfied [UM256]");
+        if (!A.eqAllScalar(s)) {
+            emit log("Error: A == s not satisfied [UM256]");
             emit log_named_uint("  Expected", s);
-            emit log("    Actual");
+            emit log("    Actual:");
+            logMat(A);
+            fail();
+        }
+    }
+
+    function assertLt(UM256 A, uint256 s) internal {
+        if (!A.ltAllScalar(s)) {
+            emit log("Error: A < s not satisfied [UM256]");
+            emit log_named_uint("  Expected", s);
+            emit log("    Actual:");
+            logMat(A);
+            fail();
+        }
+    }
+
+    function assertGt(UM256 A, uint256 s) internal {
+        if (!A.ltAllScalar(s)) {
+            emit log("Error: A > s not satisfied [UM256]");
+            emit log_named_uint("  Expected", s);
+            emit log("    Actual:");
             logMat(A);
             fail();
         }
     }
 
     function assertEq(UM256 A, UM256 B) internal {
-        if (!A.eq(B)) {
+        if (!A.eqAll(B)) {
             emit log("Error: A == B not satisfied [UM256]");
-            emit log("  Expected");
+            emit log("  Expected:");
             logMat(B);
-            emit log("    Actual");
+            emit log("    Actual:");
             logMat(A);
             fail();
         }
     }
 
     function assertNEq(UM256 A, UM256 B) internal {
-        if (A.eq(B)) {
+        if (A.eqAll(B)) {
             emit log("Error: A != B not satisfied [UM256]");
             logMat(B);
             fail();
@@ -166,29 +186,49 @@ contract TestHelper is Test {
 
     /* ------------- M32x32 ------------- */
 
-    function assertEq(M32x32 A, uint256 v) internal {
-        if (!A.eqScalar(v)) {
-            emit log("Error: A == b not satisfied [M32x32]");
-            emit log_named_uint("  Expected", v);
-            emit log("    Actual");
+    function assertLt(M32x32 A, uint256 s) internal {
+        if (!A.ltAllScalar(s)) {
+            emit log("Error: A < s not satisfied [M32x32]");
+            emit log_named_uint("  Expected", s);
+            emit log("    Actual:");
+            logMat(A);
+            fail();
+        }
+    }
+
+    function assertGt(M32x32 A, uint256 s) internal {
+        if (!A.gtAllScalar(s)) {
+            emit log("Error: A > s not satisfied [M32x32]");
+            emit log_named_uint("  Expected", s);
+            emit log("    Actual:");
+            logMat(A);
+            fail();
+        }
+    }
+
+    function assertEq(M32x32 A, uint256 s) internal {
+        if (!A.eqAllScalar(s)) {
+            emit log("Error: A == s not satisfied [M32x32]");
+            emit log_named_uint("  Expected", s);
+            emit log("    Actual:");
             logMat(A);
             fail();
         }
     }
 
     function assertEq(M32x32 A, M32x32 B) internal {
-        if (!A.eq(B)) {
+        if (!A.eqAll(B)) {
             emit log("Error: A == B not satisfied [M32x32]");
-            emit log("  Expected");
+            emit log("  Expected:");
             logMat(B);
-            emit log("    Actual");
+            emit log("    Actual:");
             logMat(A);
             fail();
         }
     }
 
     function assertNEq(M32x32 A, M32x32 B) internal {
-        if (A.eq(B)) {
+        if (A.eqAll(B)) {
             emit log("Error: A != B not satisfied [M32x32]");
             logMat(B);
             fail();
@@ -219,6 +259,20 @@ contract TestHelper is Test {
 
     bytes32 constant _MAGIC_VALUE = 0x2bdba7ddf640d8dba63497f8f2088af9fa01709eb45d239463a00082e9ccf36f;
 
+    function appendMagicValue(M32x32 A) internal pure returns (uint256) {
+        uint256 memPtr = freeMemPtr();
+        uint256 sizeUp = (A.length() * 8 + 31) & ~uint256(31);
+
+        require(memPtr == A.ref() + sizeUp, "Can't append Magic value.");
+
+        assembly {
+            mstore(memPtr, _MAGIC_VALUE)
+            mstore(0x40, add(0x20, memPtr))
+        }
+
+        return memPtr;
+    }
+
     function storeMagicValueAt(uint256 loc) internal pure {
         assembly {
             mstore(loc, _MAGIC_VALUE)
@@ -229,6 +283,18 @@ contract TestHelper is Test {
         assembly {
             value := mload(loc)
         }
+    }
+
+    function assertMagicValueAt(M32x32 A) internal {
+        uint256 sizeUp = (A.length() * 8 + 31) & ~uint256(31);
+        uint256 loc = A.ref() + sizeUp;
+        bytes32 value;
+
+        assembly {
+            value := mload(loc)
+        }
+
+        assertEq(value, _MAGIC_VALUE, "Magic value not found");
     }
 
     function assertMagicValueAt(uint256 loc) internal {
@@ -254,7 +320,15 @@ contract TestHelper is Test {
 
     /* ------------- log ------------- */
 
-    function lognewHeader(M32x32 A) internal view {
+    function logInt(string memory name, int256 x) internal view {
+        if (x == type(int256).min) {
+            console2.log(name, "57896044618658097711785492504343953926634992332820282019728792003956564819968");
+        } else {
+            console2.log(name, string.concat(x >= 0 ? "" : "-", vm.toString(x > 0 ? x : -x)));
+        }
+    }
+
+    function logHeader(M32x32 A) internal view {
         bytes32 data;
         assembly {
             data := mload(A)
@@ -262,64 +336,97 @@ contract TestHelper is Test {
         console.logBytes32(data);
     }
 
+    function logNum(N32x32 a) internal {
+        logNum("N32x32", a, 2);
+    }
+
+    function logNum(string memory name, N32x32 a) internal {
+        logNum(name, a, 2);
+    }
+
+    function logNum(N32x32 a, uint256 decimals) internal {
+        logNum("N32x32", a, decimals);
+    }
+
+    function logNum(string memory name, N32x32 a, uint256 decimals) internal {
+        string memory repr = toString(a, decimals);
+
+        if (bytes(name).length != 0) repr = string.concat(name, ": ", repr);
+
+        emit log(repr);
+    }
+
+    function toString(N32x32 a, uint256 decimals) internal pure returns (string memory repr) {
+        int256 ua = int64(N32x32.unwrap(a));
+        bool sign = ua < 0;
+        uint256 abs = uint256(sign ? -ua : ua);
+        uint256 upper = abs >> 32;
+        uint256 lower = (uint256(uint32(abs)) * (10 ** decimals) + (1 << 31)) >> 32;
+
+        repr = string.concat(sign ? "-" : "", vm.toString(upper), ".", vm.toString(lower));
+    }
+
     function logMat(UM256 A) internal {
+        logMat("", A);
+    }
+
+    function logMat(string memory name, UM256 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
-        string memory str = string.concat("\nUM256(", vm.toString(n), ",", vm.toString(m), "):\n");
+        string memory repr = string.concat("\nUM256(", vm.toString(n), ",", vm.toString(m), "): ", name, "\n");
 
         uint256 max = 10;
 
         for (uint256 i; i < n && i < max; ++i) {
             for (uint256 j; j < m && j < max; ++j) {
-                if (i == max - 1) str = string.concat(str, "..\t");
-                else str = string.concat(str, string.concat(vm.toString(A.at(i, j)), " \t"));
-                if (j == max - 1) str = string.concat(str, "..");
+                if (i == max - 1) repr = string.concat(repr, "..\t");
+                else if (j == max - 1) repr = string.concat(repr, "..");
+                else repr = string.concat(repr, string.concat(vm.toString(A.at(i, j)), " \t"));
             }
-            str = string.concat(str, "\n");
+            repr = string.concat(repr, "\n");
         }
 
-        emit log(str);
+        emit log(repr);
     }
 
     function logMat(M32x32 A) internal {
+        logMat("", A, 2);
+    }
+
+    function logMat(M32x32 A, uint256 decimals) internal {
+        logMat("", A, decimals);
+    }
+
+    function logMat(string memory name, M32x32 A, uint256 decimals) internal {
         (uint256 n, uint256 m) = A.shape();
 
-        string memory str = string.concat("\nM32x32(", vm.toString(n), ",", vm.toString(m), "):\n");
+        string memory repr = string.concat("\nM32x32(", vm.toString(n), ",", vm.toString(m), "): ", name, "\n");
 
         uint256 max = 10;
 
         for (uint256 i; i < n && i < max; ++i) {
             for (uint256 j; j < m && j < max; ++j) {
-                if (i == max - 1) str = string.concat(str, "..\t");
-                else str = string.concat(str, string.concat(vm.toString(A.at(i, j)), " \t"));
-                if (j == max - 1) str = string.concat(str, "..");
+                if (i == max - 1) {
+                    repr = string.concat(repr, "..\t");
+                } else if (j == max - 1) {
+                    repr = string.concat(repr, "..");
+                } else {
+                    repr = string.concat(
+                        repr, string.concat(toString(N32x32.wrap(int64(uint64((A.at(i, j))))), decimals), " \t")
+                    );
+                }
             }
-            str = string.concat(str, "\n");
+            repr = string.concat(repr, "\n");
         }
 
-        emit log(str);
-    }
-
-    function logMat(uint256[3][3] memory A) public {
-        (uint256 n, uint256 m) = (A.length, A[0].length);
-
-        string memory str = string.concat("\nMat(", vm.toString(n), ",", vm.toString(m), "):\n");
-
-        for (uint256 i; i < n; ++i) {
-            for (uint256 j; j < m; ++j) {
-                str = string.concat(str, string.concat(vm.toString(A[i][j]), "\t"));
-            }
-            str = string.concat(str, "\n");
-        }
-
-        emit log(str);
+        emit log(repr);
     }
 
     // function logMem(M32x32 A) public {
     //     // (uint256 n, uint256 m) = A.shape();
     //     (uint256 n, uint256 m, uint256 data, uint256 size) = A.header();
 
-    //     string memory str = string.concat("\nMem(", vm.toString(n), ",", vm.toString(m), "):\n");
+    //     string memory repr = string.concat("\nMem(", vm.toString(n), ",", vm.toString(m), "):\n");
 
     //     for (uint256 i; i < n; ++i) {
     //         for (uint256 j; j < m; ++j) {
@@ -327,12 +434,12 @@ contract TestHelper is Test {
     //             assembly {
     //                 el := mload(add(data, mul(add(mul(i, m), j), size)))
     //             }
-    //             str = string.concat(str, string.concat(vm.toString(el), "\t"));
+    //             repr = string.concat(repr, string.concat(vm.toString(el), "\t"));
     //         }
-    //         str = string.concat(str, "\n");
+    //         repr = string.concat(repr, "\n");
     //     }
 
-    //     emit log(str);
+    //     emit log(repr);
 
     function mdump(uint256 location) internal view {
         mdump(location, 1);

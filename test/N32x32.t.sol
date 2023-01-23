@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "src/N32x32.sol";
 import "./utils/TestHelper.sol";
 
-contract TestN32x32 is TestHelper {
+contract TestN32x32Invariants is TestHelper {
     /* ------------- add ------------- */
 
     /// @notice `a + 0 = a` should hold.

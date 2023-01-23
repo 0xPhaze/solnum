@@ -5,6 +5,11 @@ import "forge-std/Test.sol";
 
 type N32x32 is int64;
 
+using {add, sub, mul, div, divUp, neg, sign, abs, eq, neq, shr, shl, lte, unwrap} for N32x32 global;
+
+error N32x32_Overflow();
+error Undefined();
+
 N32x32 constant ZERO = N32x32.wrap(0);
 
 int64 constant uHALF = 0x80000000;
@@ -35,11 +40,6 @@ int64 constant uMIN_HALF = -0x4000000000000000;
 N32x32 constant MIN_HALF = N32x32.wrap(uMIN_HALF);
 
 uint256 constant UINT64_MAX = 0xffffffffffffffff;
-
-error N32x32_Overflow();
-error Undefined();
-
-using {add, sub, mul, div, divUp, neg, sign, abs, eq, neq, shr, shl, lte, unwrap} for N32x32 global;
 
 function safeCastToN32x32(int256 uc) pure returns (N32x32 c) {
     unchecked {
