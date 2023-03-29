@@ -714,20 +714,11 @@ function eqAllScalar(UM256 A, uint256 scalar) pure returns (bool equals) {
     }
 }
 
-function gtAllScalar(UM256 A, uint256 s) pure returns (bool gt) {
-    if (s == type(uint256).max) return gt = false; // Exit early.
-
+function gtAllScalar(UM256 A, uint256 s) pure returns (bool gtResult) {
     unchecked {
-        gt = gteAllScalar(A, s + 1);
-    }
-}
+        if (s == type(uint256).max) return gtResult = false; // Exit early.
 
-function gteAllScalar(UM256 A, uint256 s) pure returns (bool gte) {
-    unchecked {
-        if (s == 0) return gte = true; // Exit early.
-
-        s = s - 1; // Reduce `s` so we can use `gt`.
-        gte = true; // Set initial value to true.
+        gtResult = true; // Set initial value to true.
 
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
@@ -739,30 +730,29 @@ function gteAllScalar(UM256 A, uint256 s) pure returns (bool gte) {
             assembly {
                 let a := mload(ptr) // Load value at `ptr`.
 
-                gte := gt(a, s) // Check whether `a > s`.
+                gtResult := gt(a, s) // Check whether `a > s`.
             }
 
-            if (!gte) break; // Exit early.
+            if (!gtResult) break; // Exit early.
 
             ptr = ptr + 32; // Advance pointer to the next slot.
         }
     }
 }
 
-function ltAllScalar(UM256 A, uint256 s) pure returns (bool lt) {
-    if (s == 0) return lt = false; // Exit early.
-
+function gteAllScalar(UM256 A, uint256 s) pure returns (bool gteResult) {
     unchecked {
-        lt = lteAllScalar(A, s - 1);
+        if (s == 0) return gteResult = true; // Exit early.
+
+        gteResult = gtAllScalar(A, s - 1); // Reduce `s` so we can use `gt`.
     }
 }
 
-function lteAllScalar(UM256 A, uint256 s) pure returns (bool lte) {
+function ltAllScalar(UM256 A, uint256 s) pure returns (bool ltResult) {
     unchecked {
-        if (s == type(uint256).max) return lte = true; // Exit early.
+        if (s == 0) return ltResult = false; // Exit early.
 
-        s = s + 1; // Increase `s` so we can use `lt`.
-        lte = true; // Set initial value to true.
+        ltResult = true; // Set initial value to true.
 
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
@@ -774,13 +764,21 @@ function lteAllScalar(UM256 A, uint256 s) pure returns (bool lte) {
             assembly {
                 let a := mload(ptr) // Load value at `ptr`.
 
-                lte := lt(a, s) // Check whether `a < s`.
+                ltResult := lt(a, s) // Check whether `a < s`.
             }
 
-            if (!lte) break; // Exit early.
+            if (!ltResult) break; // Exit early.
 
             ptr = ptr + 32; // Advance pointer to the next slot.
         }
+    }
+}
+
+function lteAllScalar(UM256 A, uint256 s) pure returns (bool lteResult) {
+    unchecked {
+        if (s == type(uint256).max) return lteResult = true; // Exit early.
+
+        lteResult = ltAllScalar(A, s + 1); // Increase by `1` and use `ltAllScalar`.
     }
 }
 
@@ -790,8 +788,25 @@ function full(uint256 n, uint256 m, uint256 s) pure returns (UM256 C) {
     fill_(C, s); // Fill matrix with `s`.
 }
 
+function fillZeros_(UM256 A) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptr) = header(A);
+
+        // Size is n * m elements of 32 bytes.
+        uint256 size = n * m * 32;
+
+        assembly {
+            // Copy non-existent calldata to fill with zeros.
+            calldatacopy(ptr, calldatasize(), size)
+        }
+    }
+}
+
 function fill_(UM256 A, uint256 a) pure {
     unchecked {
+        // Optimization for filling zeros.
+        if (a == 0) return fillZeros_(A);
+
         (uint256 n, uint256 m, uint256 ptr) = header(A);
 
         // Loop over n * m elements of 32 bytes.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {N32x32, UINT64_MAX} from "src/N32x32.sol";
+import {N32x32, UINT64_MASK, ZERO, ONE} from "src/N32x32.sol";
 import {M32x32} from "src/M32x32.sol";
 import {UM256} from "src/UM256.sol";
 
@@ -95,34 +95,139 @@ contract TestHelper is Test {
         emit log_bytes32(uBytes);
     }
 
-    // function test_log() public {
-    //     // logN("ONE", ONE);
-    //     logN("-ONE", ONE.neg());
-    //     console.log();
-    //     // logN("HALF", HALF);
-    //     // console.log();
-    //     // logN("TENTH", ONE.div(10));
-    //     // emit log_named_int('MIN:', N32x32.)
-    // }
+    address private constant canRevertCaller = 0xc65f435F6dC164bE5D52Bc0a90D9A680052bFab2;
 
     modifier canRevert() {
-        if (msg.sender == address(this)) {
+        if (msg.sender == canRevertCaller) {
             _;
         } else {
+            vm.prank(canRevertCaller);
+
             (bool success, bytes memory returndata) = address(this).call(msg.data);
 
-            if (!success) {
-                // if (returndata.length != 4 || bytes4(returndata) != selector) {
-                //     emit log("Call did not revert as expected");
-                //     emit log_named_bytes("  Expected", abi.encodePacked(selector));
-                //     emit log_named_bytes("    Actual", returndata);
-                //     fail();
-                // } else {}
+            if (success) {
+                assembly {
+                    return(add(returndata, 32), mload(returndata))
+                }
+            } else {
                 vm.assume(false);
             }
         }
     }
 
+    modifier canRevertWithMsg(string memory message) {
+        if (msg.sender == canRevertCaller) {
+            _;
+        } else {
+            vm.prank(canRevertCaller);
+
+            (bool success, bytes memory returndata) = address(this).call(msg.data);
+
+            if (success) {
+                assembly {
+                    return(add(returndata, 32), mload(returndata))
+                }
+            } else {
+                assertTrue(returndata.length >= 4 + 32, "Call did not revert as expected");
+
+                string memory revertMsg;
+
+                assembly {
+                    revertMsg := add(returndata, 68)
+                }
+
+                assertEq(revertMsg, message, "Call did not revert as expected");
+
+                vm.assume(false);
+            }
+        }
+    }
+
+    modifier canRevertWithSelector(bytes4 selector) {
+        if (msg.sender == canRevertCaller) {
+            _;
+        } else {
+            vm.prank(canRevertCaller);
+
+            (bool success, bytes memory returndata) = address(this).call(msg.data);
+
+            if (success) {
+                assembly {
+                    return(add(returndata, 32), mload(returndata))
+                }
+            } else {
+                assertEq(bytes4(returndata), selector, "Call did not revert as expected");
+
+                vm.assume(false);
+            }
+        }
+    }
+
+    function assertEqCall(bytes memory calldata1, bytes memory calldata2) internal {
+        assertEqCall(address(this), calldata1, address(this), calldata2, true);
+    }
+
+    function assertEqCall(bytes memory calldata1, bytes memory calldata2, bool requireEqualRevertData) internal {
+        assertEqCall(address(this), calldata1, address(this), calldata2, requireEqualRevertData);
+    }
+
+    function assertEqCall(address addr, bytes memory calldata1, bytes memory calldata2) internal {
+        assertEqCall(addr, calldata1, addr, calldata2, true);
+    }
+
+    function assertEqCall(address addr, bytes memory calldata1, bytes memory calldata2, bool requireEqualRevertData)
+        internal
+    {
+        assertEqCall(addr, calldata1, addr, calldata2, requireEqualRevertData);
+    }
+
+    function assertEqCall(address address1, bytes memory calldata1, address address2, bytes memory calldata2)
+        internal
+    {
+        assertEqCall(address1, calldata1, address2, calldata2, true);
+    }
+
+    function assertEqCall(
+        address address1,
+        bytes memory calldata1,
+        address address2,
+        bytes memory calldata2,
+        bool requireEqualRevertData
+    ) internal {
+        (bool success1, bytes memory returndata1) = address(address1).call(calldata1);
+        (bool success2, bytes memory returndata2) = address(address2).call(calldata2);
+
+        if (success1 && success2) {
+            if (keccak256(returndata1) == keccak256(returndata2)) {
+                emit log_named_bytes("Both calls returned", returndata1);
+            } else {
+                assertEq(returndata1, returndata2, "Returned value does not match");
+            }
+        }
+        if (!success1 && success2) {
+            emit log("Error: Call reverted unexpectedly");
+            emit log_named_bytes("  Expected return-value", returndata2);
+            emit log_named_bytes("       Call revert-data", returndata1);
+            fail();
+        }
+        if (success1 && !success2) {
+            emit log("Error: Call did not revert");
+            emit log_named_bytes("  Expected revert-data", returndata2);
+            emit log_named_bytes("     Call return-value", returndata1);
+            fail();
+        }
+        if (!success1 && !success2 && requireEqualRevertData) {
+            assertEq(returndata1, returndata2, "Call revert data does not match");
+        }
+        if (!success1 && !success2) {
+            if (keccak256(returndata1) == keccak256(returndata2)) {
+                emit log_named_bytes("Both call revert-data", returndata1);
+            } else {
+                emit log_named_bytes(" First call revert-data", returndata1);
+                emit log_named_bytes("Second call revert-data", returndata2);
+            }
+        }
+    }
     /* ------------- UM256 ------------- */
 
     function assertEq(UM256 A, uint256 s) internal {
@@ -197,6 +302,7 @@ contract TestHelper is Test {
     }
 
     function assertGt(M32x32 A, uint256 s) internal {
+        // if (!A.gtAllScalar(N32x32.wrap(int64(int256(s))))) {
         if (!A.gtAllScalar(s)) {
             emit log("Error: A > s not satisfied [M32x32]");
             emit log_named_uint("  Expected", s);
@@ -207,9 +313,39 @@ contract TestHelper is Test {
     }
 
     function assertEq(M32x32 A, uint256 s) internal {
-        if (!A.eqAllScalar(s)) {
+        if (!A.eqAllScalar(N32x32.wrap(int64(int256(s))))) {
             emit log("Error: A == s not satisfied [M32x32]");
             emit log_named_uint("  Expected", s);
+            emit log("    Actual:");
+            logMat(A);
+            fail();
+        }
+    }
+
+    // function assertLt(M32x32 A, N32x32 s) internal {
+    //     if (!A.ltAllScalar(s)) {
+    //         emit log("Error: A < s not satisfied [M32x32]");
+    //         emit log_named_uint("  Expected", s);
+    //         emit log("    Actual:");
+    //         logMat(A);
+    //         fail();
+    //     }
+    // }
+
+    // function assertGt(M32x32 A, N32x32 s) internal {
+    //     if (!A.gtAllScalar(s)) {
+    //         emit log("Error: A > s not satisfied [M32x32]");
+    //         emit log_named_uint("  Expected", s);
+    //         emit log("    Actual:");
+    //         logMat(A);
+    //         fail();
+    //     }
+    // }
+
+    function assertEq(M32x32 A, N32x32 s) internal {
+        if (!A.eqAllScalar(s)) {
+            emit log("Error: A == s not satisfied [M32x32]");
+            logNum("  Expected", s);
             emit log("    Actual:");
             logMat(A);
             fail();
@@ -240,7 +376,7 @@ contract TestHelper is Test {
 
         for (uint256 i; i < n; ++i) {
             for (uint256 j; j < m; ++j) {
-                assertEq(A.at(i, j), (i == j) ? 1 : 0);
+                assertEq(A.at(i, j), (i == j) ? ONE : ZERO);
             }
         }
     }
@@ -312,7 +448,7 @@ contract TestHelper is Test {
         uint256 lenUp = ((len * 8 + 31) & ~uint256(31)) / 8;
 
         while (lenUp != len) {
-            A.setUnsafe(0, lenUp - 1, UINT64_MAX);
+            A.setUnsafe(0, lenUp - 1, N32x32.wrap(int64(uint64(UINT64_MASK))));
 
             lenUp -= 1;
         }
@@ -411,9 +547,7 @@ contract TestHelper is Test {
                 } else if (j == max - 1) {
                     repr = string.concat(repr, "..");
                 } else {
-                    repr = string.concat(
-                        repr, string.concat(toString(N32x32.wrap(int64(uint64((A.at(i, j))))), decimals), " \t")
-                    );
+                    repr = string.concat(repr, string.concat(toString(A.at(i, j), decimals), " \t"));
                 }
             }
             repr = string.concat(repr, "\n");

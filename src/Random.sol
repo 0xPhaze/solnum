@@ -5,7 +5,7 @@ import "./UM256.sol" as UM256Lib;
 import "./M32x32.sol" as M32x32Lib;
 
 import {UM256, mallocUM256} from "./UM256.sol";
-import {M32x32, mallocM32x32, _UINT32_MAX, _UINT64_MAX} from "./M32x32.sol";
+import {M32x32, mallocM32x32, UINT32_MASK} from "./M32x32.sol";
 
 type Random is uint256;
 
@@ -156,19 +156,19 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
                 // Sum all 8 fractional random numbers together
-                r1 := and(randomSeed, _UINT32_MAX)
+                r1 := and(randomSeed, UINT32_MASK)
                 randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, _UINT32_MAX))
+                r1 := add(r1, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, _UINT32_MAX))
+                r1 := add(r1, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, _UINT32_MAX))
+                r1 := add(r1, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, _UINT32_MAX))
+                r1 := add(r1, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, _UINT32_MAX))
+                r1 := add(r1, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, _UINT32_MAX))
+                r1 := add(r1, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
                 r1 := add(r1, randomSeed)
                 r1 := div(sub(r1, shl(4, 32)), 8)
@@ -176,19 +176,19 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                r2 := and(randomSeed, _UINT32_MAX)
+                r2 := and(randomSeed, UINT32_MASK)
                 randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, _UINT32_MAX))
+                r2 := add(r2, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, _UINT32_MAX))
+                r2 := add(r2, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, _UINT32_MAX))
+                r2 := add(r2, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, _UINT32_MAX))
+                r2 := add(r2, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, _UINT32_MAX))
+                r2 := add(r2, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, _UINT32_MAX))
+                r2 := add(r2, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
                 r2 := add(r2, randomSeed)
                 r2 := div(sub(r2, shl(4, 32)), 8)
@@ -196,19 +196,19 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                r3 := and(randomSeed, _UINT32_MAX)
+                r3 := and(randomSeed, UINT32_MASK)
                 randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, _UINT32_MAX))
+                r3 := add(r3, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, _UINT32_MAX))
+                r3 := add(r3, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, _UINT32_MAX))
+                r3 := add(r3, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, _UINT32_MAX))
+                r3 := add(r3, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, _UINT32_MAX))
+                r3 := add(r3, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, _UINT32_MAX))
+                r3 := add(r3, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
                 r3 := add(r3, randomSeed)
                 r3 := div(sub(r3, shl(4, 32)), 8)
@@ -216,19 +216,19 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                r4 := and(randomSeed, _UINT32_MAX)
+                r4 := and(randomSeed, UINT32_MASK)
                 randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, _UINT32_MAX))
+                r4 := add(r4, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, _UINT32_MAX))
+                r4 := add(r4, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, _UINT32_MAX))
+                r4 := add(r4, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, _UINT32_MAX))
+                r4 := add(r4, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, _UINT32_MAX))
+                r4 := add(r4, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, _UINT32_MAX))
+                r4 := add(r4, and(randomSeed, UINT32_MASK))
                 randomSeed := shr(32, randomSeed)
                 r4 := add(r4, randomSeed)
                 r4 := div(sub(r4, shl(4, 32)), 8)

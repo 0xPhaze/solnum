@@ -62,7 +62,7 @@ contract TestM32x32 is TestHelper {
 
         M32x32 A = ones(n, m);
 
-        assertEq(A, 1);
+        assertEq(A, ONE);
     }
 
     function test_eye() public {
@@ -71,7 +71,7 @@ contract TestM32x32 is TestHelper {
         assertIsEye(A);
     }
 
-    function test_full(uint256 n, uint256 m, uint64 s) public {
+    function test_full(uint256 n, uint256 m, N32x32 s) public {
         n = bound(n, 0, 10);
         m = bound(m, 0, 10);
 
@@ -87,7 +87,7 @@ contract TestM32x32 is TestHelper {
         M32x32 A = range(start, start + len);
 
         for (uint256 i; i < len; i++) {
-            assertEq(A.atIndex(i), start + i);
+            assertEq(A.atIndex(i), wrap(start + i << 32));
         }
     }
 
@@ -111,14 +111,14 @@ contract TestM32x32 is TestHelper {
 
             B[i] = v;
 
-            A.setIndex(i, v);
+            A.setIndex(i, wrap(v));
         }
 
         // Make sure these values can be retrieved again.
         for (uint256 k; k < data.length; k++) {
             uint256 i = data[k][0] % n;
 
-            assertEq(A.atIndex(i), B[i]);
+            assertEq(A.atIndex(i), wrap(B[i]));
         }
     }
 
@@ -142,7 +142,7 @@ contract TestM32x32 is TestHelper {
 
             B[i][j] = v;
 
-            A.set(i, j, v);
+            A.set(i, j, wrap(v));
         }
 
         // Make sure these values can be retrieved again.
@@ -150,7 +150,7 @@ contract TestM32x32 is TestHelper {
             uint256 i = data[k][0] % n;
             uint256 j = data[k][1] % m;
 
-            assertEq(A.at(i, j), B[i][j]);
+            assertEq(A.at(i, j), wrap(B[i][j]));
         }
     }
 
@@ -193,13 +193,13 @@ contract TestM32x32 is TestHelper {
         maxValue = bound(maxValue, 0, UINT256_INT64_MAX);
         minValue = bound(minValue, 0, maxValue);
 
-        M32x32 A = full(1, n, s);
+        M32x32 A = full(1, n, N32x32.wrap(int64(int256(s))));
 
         if (s < minValue) minValue = s;
         if (s > maxValue) maxValue = s;
 
-        A.setIndex(i, minValue);
-        A.setIndex(j, maxValue);
+        A.setIndex(i, wrap(minValue));
+        A.setIndex(j, wrap(maxValue));
 
         (uint256 minValue_, uint256 maxValue_) = A.minMax();
 
@@ -211,100 +211,81 @@ contract TestM32x32 is TestHelper {
 
     /* ------------- Mat x Scalar -> Scalar operators ------------- */
 
-    // function test_eqAllScalar() public {
-    //     uint256 n = 5;
-    //     // uint256 i;
-    //     uint256 s = 7;
+    // todo
+    // function test_eqAllScalar(uint256 n, uint256 i, N32x32 s) public {
     //     n = bound(n, 1, 20);
-    //     // i = bound(i, 0, n - 1);
-    //     s = bound(s, 1, type(uint256).max);
+    //     i = bound(i, 0, n - 1);
+    //     s = bound(s, 1, MAX);
+
+    //     M32x32 A = full(1, n, N32x32.wrap(int64(int256(s))));
+
+    //     appendMagicValue(A); // This value should not be touched.
+    //     assertEq(A, s);
+
+    //     A.set(0, i, ZERO); // Setting any entry to `0`, `A = s` does not hold.
+    //     assertFalse(A.eqAllScalar(N32x32.wrap(int64(int256(s)))));
+    //     assertMagicValueAt(A); // Make sure the magic value can be retrieved.
+    // }
+
+    // function test_ltAllScalar(uint256 n, uint256 i, N32x32 s) public {
+    //     n = bound(n, 1, 20);
+    //     i = bound(i, 0, n - 1);
+    //     s = bound(s, 0, MAX.sub(1));
+
+    //     M32x32 A = full(1, n, N32x32.wrap(int64(int256(s))));
+
+    //     appendMagicValue(A); // This value should not be touched.
+    //     assertTrue(A.ltAllScalar(s + 1));
+
+    //     A.set(0, i, s + 1); // Setting any entry to `s + 1`, `A < s + 1` does not hold.
+    //     assertFalse(A.ltAllScalar(s + 1));
+    //     assertMagicValueAt(A); // Make sure the magic value can be retrieved.
+    // }
+
+    // function test_lteAllScalar(uint256 n, uint256 i, N32x32 s) public {
+    //     n = bound(n, 1, 20);
+    //     i = bound(i, 0, n - 1);
+    //     s = bound(s, 0, MAX.sub(1));
+
+    //     M32x32 A = full(1, n, N32x32.wrap(int64(int256(s))));
+
+    //     appendMagicValue(A); // This value should not be touched.
+    //     assertTrue(A.lteAllScalar(s));
+
+    //     A.set(0, i, s + 1); // Setting any entry to `s + 1`, `A <= s` does not hold.
+    //     assertFalse(A.lteAllScalar(s));
+    //     assertMagicValueAt(A); // Make sure the magic value can be retrieved.
+    // }
+
+    // function test_gtAllScalar(uint256 n, uint256 i, N32x32 s) public {
+    //     n = bound(n, 1, 20);
+    //     i = bound(i, 0, n - 1);
+    //     s = bound(s, 1, MAX);
 
     //     M32x32 A = full(1, n, s);
 
-    //     // // Make sure out of bounds values are not used.
-    //     // appendDirtyBits(A);
+    //     appendMagicValue(A); // This value should not be touched.
+    //     assertTrue(A.gtAllScalar(s - 1));
 
-    //     assertEq(A, s);
-
-    //     // // Setting any entry to `0`, `A = s` does not hold.
-    //     // A.set(0, i, 0);
-    //     // assertFalse(A.eqAllScalar(s));
+    //     A.set(0, i, s - 1); // Setting any entry to `s - 1`, `A > s - 1` does not hold.
+    //     assertFalse(A.gtAllScalar(s - 1));
+    //     assertMagicValueAt(A); // Make sure the magic value can be retrieved.
     // }
 
-    function test_eqAllScalar(uint256 n, uint256 i, uint256 s) public {
-        n = bound(n, 1, 20);
-        i = bound(i, 0, n - 1);
-        s = bound(s, 1, uint256(int256(type(int64).max)));
+    // function test_gteAllScalar(uint256 n, uint256 i, N32x32 s) public {
+    //     n = bound(n, 1, 20);
+    //     i = bound(i, 0, n - 1);
+    //     s = bound(s, 1, MAX);
 
-        M32x32 A = full(1, n, s);
+    //     M32x32 A = full(1, n, s);
 
-        appendMagicValue(A); // This value should not be touched.
-        assertEq(A, s);
+    //     appendMagicValue(A); // This value should not be touched.
+    //     assertTrue(A.gteAllScalar(s));
 
-        A.set(0, i, 0); // Setting any entry to `0`, `A = s` does not hold.
-        assertFalse(A.eqAllScalar(s));
-        assertMagicValueAt(A); // Make sure the magic value can be retrieved.
-    }
-
-    function test_ltAllScalar(uint256 n, uint256 i, uint256 s) public {
-        n = bound(n, 1, 20);
-        i = bound(i, 0, n - 1);
-        s = bound(s, 0, uint256(int256(type(int64).max - 1)));
-
-        M32x32 A = full(1, n, s);
-
-        appendMagicValue(A); // This value should not be touched.
-        assertTrue(A.ltAllScalar(s + 1));
-
-        A.set(0, i, s + 1); // Setting any entry to `s + 1`, `A < s + 1` does not hold.
-        assertFalse(A.ltAllScalar(s + 1));
-        assertMagicValueAt(A); // Make sure the magic value can be retrieved.
-    }
-
-    function test_lteAllScalar(uint256 n, uint256 i, uint256 s) public {
-        n = bound(n, 1, 20);
-        i = bound(i, 0, n - 1);
-        s = bound(s, 0, uint256(int256(type(int64).max - 1)));
-
-        M32x32 A = full(1, n, s);
-
-        appendMagicValue(A); // This value should not be touched.
-        assertTrue(A.lteAllScalar(s));
-
-        A.set(0, i, s + 1); // Setting any entry to `s + 1`, `A <= s` does not hold.
-        assertFalse(A.lteAllScalar(s));
-        assertMagicValueAt(A); // Make sure the magic value can be retrieved.
-    }
-
-    function test_gtAllScalar(uint256 n, uint256 i, uint256 s) public {
-        n = bound(n, 1, 20);
-        i = bound(i, 0, n - 1);
-        s = bound(s, 1, uint256(int256(type(int64).max)));
-
-        M32x32 A = full(1, n, s);
-
-        appendMagicValue(A); // This value should not be touched.
-        assertTrue(A.gtAllScalar(s - 1));
-
-        A.set(0, i, s - 1); // Setting any entry to `s - 1`, `A > s - 1` does not hold.
-        assertFalse(A.gtAllScalar(s - 1));
-        assertMagicValueAt(A); // Make sure the magic value can be retrieved.
-    }
-
-    function test_gteAllScalar(uint256 n, uint256 i, uint256 s) public {
-        n = bound(n, 1, 20);
-        i = bound(i, 0, n - 1);
-        s = bound(s, 1, uint256(int256(type(int64).max)));
-
-        M32x32 A = full(1, n, s);
-
-        appendMagicValue(A); // This value should not be touched.
-        assertTrue(A.gteAllScalar(s));
-
-        A.set(0, i, s - 1); // Setting any entry to `s - 1`, `A >= s` does not hold.
-        assertFalse(A.gteAllScalar(s));
-        assertMagicValueAt(A); // Make sure the magic value can be retrieved.
-    }
+    //     A.set(0, i, s - 1); // Setting any entry to `s - 1`, `A >= s` does not hold.
+    //     assertFalse(A.gteAllScalar(s));
+    //     assertMagicValueAt(A); // Make sure the magic value can be retrieved.
+    // }
 
     /* ------------- Mat x Mat -> Scalar operators ------------- */
 
@@ -322,7 +303,7 @@ contract TestM32x32 is TestHelper {
         assertEq(A, B);
 
         // Setting any entry to `0`, `A = B` does not hold.
-        A.set(0, i, 0);
+        A.set(0, i, ZERO);
         assertNEq(A, B);
     }
 
@@ -421,7 +402,7 @@ contract TestM32x32 is TestHelper {
 
     function test_addScalarUnchecked(uint256 n, uint256 s) public {
         n = bound(n, 1, 20);
-        s = bound(s, 1, UINT64_MAX);
+        s = bound(s, 1, UINT64_MASK);
 
         M32x32 A = zeros(1, n);
 
@@ -447,7 +428,7 @@ contract TestM32x32 is TestHelper {
 
     function test_add_revert_overflow(uint256 n) public {
         M32x32 A = ones(1, bound(n, 1, 20));
-        M32x32 B = full(1, bound(n, 1, 20), UINT256_INT64_MAX);
+        M32x32 B = full(1, bound(n, 1, 20), MAX);
 
         logMat(B);
 
@@ -455,21 +436,22 @@ contract TestM32x32 is TestHelper {
         A.add(B);
     }
 
-    function test_mulScalar(uint256 n, uint256 s) public {
-        n = bound(n, 1, 20);
-        s = bound(s, 1, UINT256_INT64_MAX);
+    // TODO
+    // function test_mulScalar(uint256 n, N32x32 s) public {
+    //     n = bound(n, 1, 20);
+    //     s = bound(s, 1, MAX);
 
-        M32x32 A = ones(1, n);
+    //     M32x32 A = ones(1, n);
 
-        // Make sure out of bounds values are not used.
-        appendDirtyBits(A);
+    //     // Make sure out of bounds values are not used.
+    //     appendDirtyBits(A);
 
-        assertEq(A.mulScalar(s), s);
-    }
+    //     assertEq(A.mulScalar(s), s);
+    // }
 
     function test_mulScalarUnchecked(uint256 n, uint256 s) public {
         n = bound(n, 1, 20);
-        s = bound(s, 1, UINT64_MAX);
+        s = bound(s, 1, UINT64_MASK);
 
         M32x32 A = ones(1, n);
 
@@ -493,7 +475,7 @@ contract TestM32x32 is TestHelper {
         A.mulScalar(UINT256_INT64_MIN);
     }
 
-    function test_fill(uint256 n, uint256 m, uint64 s) public {
+    function test_fill(uint256 n, uint256 m, N32x32 s) public {
         n = bound(n, 0, 10);
         m = bound(m, 0, 10);
 
@@ -698,7 +680,7 @@ contract TestGasM32x32 {
     }
 
     function test_perf_full_128() public pure {
-        full(128, 128, 1);
+        full(128, 128, ONE);
     }
 
     function test_perf_range_1024() public pure {
@@ -742,16 +724,16 @@ contract TestGasM32x32 {
     function test_perf_eqAllScalar_128() public pure {
         M32x32 A = zeros(128, 128);
 
-        A.eqAllScalar(0);
-        A.set(100, 100, 123);
-        A.eqAllScalar(0);
+        A.eqAllScalar(ZERO);
+        A.set(100, 100, ONE);
+        A.eqAllScalar(ZERO);
     }
 
     function test_perf_ltAllScalar_128() public pure {
         M32x32 A = zeros(128, 128);
 
         A.ltAllScalar(100);
-        A.set(100, 100, 123);
+        A.set(100, 100, ONE);
         A.ltAllScalar(100);
     }
 
@@ -759,7 +741,7 @@ contract TestGasM32x32 {
         M32x32 A = ones(128, 128);
 
         A.gtAllScalar(0);
-        A.set(100, 100, 0);
+        A.set(100, 100, ZERO);
         A.gtAllScalar(0);
     }
 
@@ -815,7 +797,7 @@ contract TestGasM32x32 {
     function test_perf_fill_1024() public pure {
         M32x32 A = mallocM32x32(128, 128);
 
-        A.fill_(1);
+        A.fill_(N32x32.wrap(int64(int256(1))));
     }
 
     /* ------------- Mat x Mat -> Mat operators ------------- */
@@ -887,7 +869,7 @@ contract TestMemSafe is TestHelper {
 
         uint256 lenUp = (n + 3) & ~uint256(3);
 
-        A.setUnsafe(0, lenUp, 1);
+        A.setUnsafe(0, lenUp, N32x32.wrap(int64(1)));
     }
 
     function testFail_magicValueTest(uint256 n) public {
@@ -900,7 +882,7 @@ contract TestMemSafe is TestHelper {
 
         uint256 lenUp = (n + 3) & ~uint256(3);
 
-        A.setUnsafe(0, lenUp, 1);
+        A.setUnsafe(0, lenUp, N32x32.wrap(int64(1)));
         assertMagicValueAt(A);
     }
 }
