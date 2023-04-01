@@ -4,12 +4,12 @@ pragma solidity ^0.8.0;
 import "./UM256.sol" as UM256Lib;
 import "./M32x32.sol" as M32x32Lib;
 
-import {UM256, mallocUM256} from "./UM256.sol";
-import {M32x32, mallocM32x32, UINT32_MASK} from "./M32x32.sol";
+import { UM256, mallocUM256 } from "./UM256.sol";
+import { M32x32, mallocM32x32, UINT32_MASK } from "./M32x32.sol";
 
 type Random is uint256;
 
-using {next, getSeed, rand, randn, randUM256} for Random global;
+using { next, getSeed, rand, randn, randUM256 } for Random global;
 
 function seed(uint256 randomSeed) pure returns (Random r) {
     assembly {
@@ -292,7 +292,8 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
 //         return nextFromRandomSeed(low, high, randomSeed);
 //     }
 
-//     function nextFromRandomSeed(uint256 low, uint256 high, uint256 randomSeed) internal returns (uint256 nextRandom) {
+//     function nextFromRandomSeed(uint256 low, uint256 high, uint256 randomSeed) internal returns (uint256 nextRandom)
+// {
 //         require(low <= high, "low > high");
 
 //         assembly {

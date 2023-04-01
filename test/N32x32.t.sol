@@ -5,6 +5,54 @@ import "src/N32x32.sol";
 import "./utils/TestHelper.sol";
 
 contract TestN32x32Invariants is TestHelper {
+    function test_fromUint_toUint(uint256 ua) public {
+        if (ua > uint64(uMAX32)) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
+
+        assertEq(N32x32FromUint(ua).toUint(), ua);
+    }
+
+    function test_fromUint64_toUint64(uint64 ua) public {
+        if (ua > uint64(uMAX32)) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
+
+        assertEq(N32x32FromUint64(ua).toUint64(), ua);
+    }
+
+    function test_fromUint32_toUint32(uint32 ua) public {
+        if (ua > uint64(uMAX32)) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
+
+        assertEq(N32x32FromUint32(ua).toUint32(), ua);
+    }
+
+    function test_fromInt_toInt(int256 ua) public {
+        if (ua < type(int32).min || ua > type(int32).max) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
+
+        assertEq(N32x32FromInt(ua).toInt(), ua);
+    }
+
+    function test_fromInt64_toInt64(int64 ua) public {
+        if (ua < type(int32).min || ua > type(int32).max) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
+
+        assertEq(N32x32FromInt64(ua).toInt64(), ua);
+    }
+
+    function test_fromInt32_toInt32(int32 ua) public {
+        if (ua < type(int32).min || ua > type(int32).max) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
+
+        assertEq(N32x32FromInt32(ua).toInt32(), ua);
+    }
+
     /* ------------- add ------------- */
 
     /// @notice `a + 0 = a` should hold.
@@ -333,7 +381,16 @@ contract TestN32x32Differential is TestHelper {
         );
     }
 
-    function simpleAdd(int64 a1, int64 b1, int64 c1, int64 d1, int64 a2, int64 b2, int64 c2, int64 d2)
+    function simpleAdd(
+        int64 a1,
+        int64 b1,
+        int64 c1,
+        int64 d1,
+        int64 a2,
+        int64 b2,
+        int64 c2,
+        int64 d2
+    )
         public
         pure
         returns (uint256)

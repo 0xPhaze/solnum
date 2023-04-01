@@ -687,7 +687,8 @@ function vari(UM256 A) pure returns (uint256 variance) {
         }
 
         // todo: double check rounding directions
-        variance = ((s2 - (s * s + (len + 1) / 2) / len) + len / 2 - 1) / (len - 1); // note: uses the unbiased version. Use `/ len` for the biased version.
+        variance = ((s2 - (s * s + (len + 1) / 2) / len) + len / 2 - 1) / (len - 1); // note: uses the unbiased version.
+            // Use `/ len` for the biased version.
     }
 }
 

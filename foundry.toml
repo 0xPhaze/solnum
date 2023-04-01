@@ -1,5 +1,5 @@
 [profile.default]
-solc = "0.8.17"
+solc = "0.8.19"
 # optimizer = false
 # optimizer_runs = 0
 optimizer = true
@@ -15,3 +15,13 @@ rpc_endpoints = { mainnet = "https://rpc.ankr.com/eth", optimism = "https://rpc.
 # runs = 1_000
 runs = 10_000
 # runs = 1_000_000
+
+
+[fmt]
+bracket_spacing = true
+int_types = "long"
+multiline_func_header = "all"
+number_underscore = "preserve"
+quote_style = "double"
+tab_width = 4
+# wrap_comments = true

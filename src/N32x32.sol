@@ -5,11 +5,37 @@ import "forge-std/Test.sol";
 
 type N32x32 is int64;
 
-using {add, addUnchecked, sub, mul, div, divUp, neg, sign, abs, eq, neq, shr, shl, lte, unwrap} for N32x32 global;
+// Math operators.
+using {
+    add,
+    addUnchecked,
+    sub,
+    mul,
+    div,
+    divUp,
+    addInt,
+    subInt,
+    mulInt,
+    divInt,
+    neg,
+    sign,
+    abs,
+    shr,
+    shl
+} for N32x32 global;
 
+// Comparators.
+using { eq, neq, lt, lte, gt, gte } for N32x32 global;
+
+// Conversion.
+using { toInt, toInt64, toInt32, toUint, toUint64, toUint32, unwrap } for N32x32 global;
+
+// Errors.
 error N32x32_Overflow();
+error N32x32_Underflow();
 error Undefined();
 
+// Constants.
 N32x32 constant ZERO = N32x32.wrap(0);
 
 int64 constant uHALF = 0x80000000;
@@ -30,8 +56,6 @@ N32x32 constant NEG_TWO = N32x32.wrap(uNEG_TWO);
 int64 constant uMAX = 0x7fffffffffffffff;
 N32x32 constant MAX = N32x32.wrap(uMAX);
 
-uint256 constant uNEG_MIN = 0x8000000000000000;
-
 int64 constant uMIN = -0x8000000000000000;
 N32x32 constant MIN = N32x32.wrap(uMIN);
 
@@ -41,11 +65,18 @@ N32x32 constant MAX_HALF = N32x32.wrap(uMAX_HALF);
 int64 constant uMIN_HALF = -0x4000000000000000;
 N32x32 constant MIN_HALF = N32x32.wrap(uMIN_HALF);
 
+int64 constant uMAX32 = 0x7fffffff;
+N32x32 constant MAX32 = N32x32.wrap(uMAX);
+
 int64 constant uMIN32 = -0x80000000;
 N32x32 constant MIN32 = N32x32.wrap(uMIN);
 
+uint256 constant uMAX32WAD = 0x6f05b59c5d1494c589c0000;
+
 uint256 constant UINT32_MASK = 0xffffffff;
 uint256 constant UINT64_MASK = 0xffffffffffffffff;
+
+uint256 constant uNEG_MIN = 0x8000000000000000;
 
 // function safeCastToN32x32(int256 uc) pure returns (N32x32 c) {
 //     unchecked {
@@ -113,6 +144,32 @@ function divUp(N32x32 a, N32x32 b) pure returns (N32x32 c) {
     }
 }
 
+function max(N32x32 a, N32x32 b) pure returns (N32x32 c) {
+    c = unwrap(a) > unwrap(b) ? a : b;
+}
+
+function min(N32x32 a, N32x32 b) pure returns (N32x32 c) {
+    c = unwrap(a) < unwrap(b) ? a : b;
+}
+
+/* ------------- math operators (overloads) ------------- */
+
+function addInt(N32x32 a, int256 ub) pure returns (N32x32 c) {
+    c = add(a, N32x32FromInt(ub));
+}
+
+function subInt(N32x32 a, int256 ub) pure returns (N32x32 c) {
+    c = sub(a, N32x32FromInt(ub));
+}
+
+function mulInt(N32x32 a, int256 ub) pure returns (N32x32 c) {
+    c = mul(a, N32x32FromInt(ub));
+}
+
+function divInt(N32x32 a, int256 ub) pure returns (N32x32 c) {
+    c = div(a, N32x32FromInt(ub));
+}
+
 /* ------------- single operators ------------- */
 
 function sign(N32x32 a) pure returns (N32x32 c) {
@@ -159,13 +216,87 @@ function isZero(N32x32 a) pure returns (bool c) {
 
 /* ------------- conversion ------------- */
 
-function toN32x32(int256 a) pure returns (N32x32 c) {
-    if (uint256(a) - uint256(int256(uMIN)) > UINT64_MASK) revert N32x32_Overflow();
+function N32x32FromInt(int256 a) pure returns (N32x32 c) {
+    unchecked {
+        if (uint256(a) - uint256(int256(uMIN32)) > UINT32_MASK) revert N32x32_Overflow();
 
-    c = N32x32.wrap(int64(a << 32));
+        c = N32x32.wrap(int64(a) << 32);
+    }
 }
 
-function fromN32x32(N32x32 a) pure returns (int32 c) {
+function N32x32FromInt64(int64 a) pure returns (N32x32 c) {
+    unchecked {
+        if (uint256(int256(a)) - uint256(int256(uMIN32)) > UINT32_MASK) revert N32x32_Overflow();
+
+        c = N32x32.wrap(a << 32);
+    }
+}
+
+function N32x32FromInt32(int32 a) pure returns (N32x32 c) {
+    c = N32x32.wrap(int64(a) << 32);
+}
+
+function N32x32FromUint(uint256 a) pure returns (N32x32 c) {
+    if (a > uint256(int256(uMAX32))) revert N32x32_Overflow();
+
+    c = N32x32.wrap(int64(int256(a)) << 32);
+}
+
+function N32x32FromUint64(uint64 a) pure returns (N32x32 c) {
+    if (a > uint256(int256(uMAX32))) revert N32x32_Overflow();
+
+    c = N32x32.wrap(int64(a) << 32);
+}
+
+function N32x32FromUint32(uint32 a) pure returns (N32x32 c) {
+    if (a > uint256(int256(uMAX32))) revert N32x32_Overflow();
+
+    c = N32x32.wrap(int64(int32(a)) << 32);
+}
+
+function N32x32FromWAD(uint256 a) pure returns (N32x32 c) {
+    if (a > uMAX32WAD) revert N32x32_Overflow();
+
+    c = N32x32.wrap(int64((int256(a) << 32) / 1e18));
+}
+
+function toInt(N32x32 a) pure returns (int256 c) {
+    assembly {
+        c := sar(32, a)
+    }
+}
+
+function toInt32(N32x32 a) pure returns (int32 c) {
+    assembly {
+        c := sar(32, a)
+    }
+}
+
+function toInt64(N32x32 a) pure returns (int64 c) {
+    assembly {
+        c := sar(32, a)
+    }
+}
+
+function toUint(N32x32 a) pure returns (uint256 c) {
+    if (N32x32.unwrap(a) < 0) revert N32x32_Underflow();
+
+    assembly {
+        c := shr(32, a)
+    }
+}
+
+function toUint64(N32x32 a) pure returns (uint64 c) {
+    if (N32x32.unwrap(a) < 0) revert N32x32_Underflow();
+
+    assembly {
+        c := shr(32, a)
+    }
+}
+
+function toUint32(N32x32 a) pure returns (uint32 c) {
+    if (N32x32.unwrap(a) < 0) revert N32x32_Underflow();
+
     assembly {
         c := shr(32, a)
     }
@@ -175,21 +306,17 @@ function unwrap(N32x32 a) pure returns (int64 c) {
     c = N32x32.unwrap(a);
 }
 
-// function wrap(int64 a) pure returns (N32x32 c) {
-//     c = N32x32.wrap(a);
+// function N32x32SafeWrapInt(int256 a) pure returns (N32x32 c) {
+//     if (uint256(a) - uint256(int256(uMIN)) > UINT64_MASK) revert N32x32_Overflow();
+
+//     c = N32x32.wrap(int64(int256(a)));
 // }
 
-function wrap(uint256 a) pure returns (N32x32 c) {
-    if (a > uint256(int256(uMAX))) revert N32x32_Overflow();
+// function N32x32SafeWrapUint(uint256 a) pure returns (N32x32 c) {
+//     if (a > uint256(int256(uMAX))) revert N32x32_Overflow();
 
-    c = N32x32.wrap(int64(int256(a)));
-}
-
-function wrapInt256(int256 a) pure returns (N32x32 c) {
-    if (uint256(a) - uint256(int256(uMIN)) > UINT64_MASK) revert N32x32_Overflow();
-
-    c = N32x32.wrap(int64(int256(a)));
-}
+//     c = N32x32.wrap(int64(int256(a)));
+// }
 
 /* ------------- bitwise operators ------------- */
 
