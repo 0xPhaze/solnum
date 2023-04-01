@@ -8,8 +8,9 @@ import { UM256 } from "src/UM256.sol";
 import "forge-std/Test.sol";
 
 contract TestHelper is Test {
-    uint256 log_level_decimals = 2;
-    bool log_level_extended = true;
+    bool log_mat_extended = false;
+    uint256 log_mat_max = 10;
+    uint256 log_mat_decimals = 2;
 
     /* ------------- N32x32 ------------- */
 
@@ -396,11 +397,11 @@ contract TestHelper is Test {
     }
 
     function logNum(N32x32 a) internal {
-        logNum("N32x32", a, log_level_decimals);
+        logNum("N32x32", a, log_mat_decimals);
     }
 
     function logNum(string memory name, N32x32 a) internal {
-        logNum(name, a, log_level_decimals);
+        logNum(name, a, log_mat_decimals);
     }
 
     function logNum(N32x32 a, uint256 decimals) internal {
@@ -416,7 +417,7 @@ contract TestHelper is Test {
     }
 
     function toString(N32x32 a) internal view returns (string memory repr) {
-        return toString(a, log_level_decimals);
+        return toString(a, log_mat_decimals);
     }
 
     function toString(N32x32 a, uint256 decimals) internal view returns (string memory repr) {
@@ -428,7 +429,7 @@ contract TestHelper is Test {
 
         repr = string.concat(toString(upper), ".", toString(lower));
 
-        if (log_level_extended) repr = string.concat(repr, " [", toHexString(uint64(uint256(ua)), 8), "]");
+        if (log_mat_extended) repr = string.concat(repr, " [", toHexString(uint64(uint256(ua)), 8), "]");
     }
 
     function toStringExtended(N32x32 a, uint256 decimals) internal view returns (string memory repr) {
@@ -444,12 +445,12 @@ contract TestHelper is Test {
 
         string memory repr = string.concat("\nUM256(", toString(n), ",", toString(m), "): ", name, "\n");
 
-        uint256 max = 10;
+        uint256 max = log_mat_max;
 
         for (uint256 i; i < n && i < max; ++i) {
             for (uint256 j; j < m && j < max; ++j) {
-                if (i == max - 1) repr = string.concat(repr, "..\t");
-                else if (j == max - 1) repr = string.concat(repr, "..");
+                if (j == max - 1 && max < m) repr = string.concat(repr, "..\t");
+                else if (i == max - 1 && max < n) repr = string.concat(repr, "..");
                 else repr = string.concat(repr, string.concat(toString(A.at(i, j)), " \t"));
             }
             repr = string.concat(repr, "\n");
@@ -459,7 +460,7 @@ contract TestHelper is Test {
     }
 
     function logMat(M32x32 A) internal {
-        logMat("", A, log_level_decimals);
+        logMat("", A, log_mat_decimals);
     }
 
     function logMat(M32x32 A, uint256 decimals) internal {
@@ -471,12 +472,12 @@ contract TestHelper is Test {
 
         string memory repr = string.concat("\nM32x32(", toString(n), ",", toString(m), "): ", name, "\n");
 
-        uint256 max = 10;
+        uint256 max = log_mat_max + 1;
 
         for (uint256 i; i < n && i < max; ++i) {
             for (uint256 j; j < m && j < max; ++j) {
-                if (i == max - 1) repr = string.concat(repr, "..\t");
-                else if (j == max - 1) repr = string.concat(repr, "..");
+                if (j == max - 1 && max < m) repr = string.concat(repr, "..");
+                else if (i == max - 1 && max < n) repr = string.concat(repr, "..\t");
                 else repr = string.concat(repr, string.concat(toString(A.at(i, j), decimals), " \t"));
             }
             repr = string.concat(repr, "\n");

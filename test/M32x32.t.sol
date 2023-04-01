@@ -331,24 +331,14 @@ contract TestM32x32 is TestHelper {
     }
 
     function test_transpose() public {
-        log_level_extended = false;
+        log_mat_extended = false;
+        log_mat_max = 15;
 
         // n = bound(n, 1, 4);
         // m = bound(m, 1, 4);
-        (uint256 n, uint256 m) = (16, 16);
 
-        // M32x32(4,2):
-        // 1     2
-        // 3     4
-        // 5     6
-        // 7     8
-
-        // M32x32(2,4):
-        // 1     3     5     7
-        // 2     4     6     8
-
-        // M32x32 A = range(1, 1 + 64).reshape(8, 8);
-        // M32x32 A_T = A.T();
+        (uint256 n, uint256 m) = (13, 8);
+        // (uint256 n, uint256 m) = (10, 8);
 
         M32x32 A = range(1, 1 + n * m).reshape(n, m);
 
@@ -358,7 +348,7 @@ contract TestM32x32 is TestHelper {
 
         logMat(A);
         logMat(A_T);
-        logMat(A_T.T());
+        // logMat(A_T.T());
 
         // assertEq(A_T.T(), A);
 
