@@ -331,14 +331,16 @@ contract TestM32x32 is TestHelper {
     }
 
     function test_transpose() public {
+        log_mat_decimals = 0;
         log_mat_extended = false;
         log_mat_max = 15;
 
         // n = bound(n, 1, 4);
         // m = bound(m, 1, 4);
 
-        (uint256 n, uint256 m) = (13, 8);
-        // (uint256 n, uint256 m) = (10, 8);
+        // covered:
+        // (uint256 n, uint256 m) = (7, 8);
+        (uint256 n, uint256 m) = (7, 3);
 
         M32x32 A = range(1, 1 + n * m).reshape(n, m);
 
@@ -737,23 +739,23 @@ contract TestM32x32 is TestHelper {
 //         A.mean();
 //     }
 
-// function test_perf_min_128() public pure {
-//     M32x32 A = mallocM32x32(128, 128);
+//     function test_perf_min_128() public pure {
+//         M32x32 A = mallocM32x32(128, 128);
 
-//     A.min();
-// }
+//         A.min();
+//     }
 
-// function test_perf_max_128() public pure {
-//     M32x32 A = mallocM32x32(128, 128);
+//     function test_perf_max_128() public pure {
+//         M32x32 A = mallocM32x32(128, 128);
 
-//     A.max();
-// }
+//         A.max();
+//     }
 
-// function test_perf_minMax_128() public pure {
-//     M32x32 A = mallocM32x32(128, 128);
+//     function test_perf_minMax_128() public pure {
+//         M32x32 A = mallocM32x32(128, 128);
 
-//     A.minMax();
-// }
+//         A.minMax();
+//     }
 
 //     /* ------------- Mat x Scalar -> Scalar operators ------------- */
 
@@ -773,13 +775,13 @@ contract TestM32x32 is TestHelper {
 //         A.ltAllScalar(MAX);
 //     }
 
-//     function test_perf_gtAllScalar_128() public pure {
-//         M32x32 A = ones(128, 128);
+//     // function test_perf_gtAllScalar_128() public pure {
+//     //     M32x32 A = ones(128, 128);
 
-//         A.gtAllScalar(3);
-//         A.set(100, 100, ZERO);
-//         A.gtAllScalar(3);
-//     }
+//     //     A.gtAllScalar(3);
+//     //     A.set(100, 100, ZERO);
+//     //     A.gtAllScalar(3);
+//     // }
 
 //     /* ------------- Mat x Mat -> Scalar operators ------------- */
 
@@ -796,6 +798,12 @@ contract TestM32x32 is TestHelper {
 //         M32x32 A = mallocM32x32(128, 128);
 
 //         A.transpose();
+//     }
+
+//     function test_perf_transposeNaive_128() public pure {
+//         M32x32 A = mallocM32x32(128, 128);
+
+//         A.transposeNaive();
 //     }
 
 //     // function test_perf_map_128() public {

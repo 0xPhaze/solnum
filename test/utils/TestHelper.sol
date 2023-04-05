@@ -427,7 +427,7 @@ contract TestHelper is Test {
         int256 upper = ua >> 32;
         uint256 lower = (uint256(uint32(abs)) * (10 ** decimals) + (1 << 31)) >> 32;
 
-        repr = string.concat(toString(upper), ".", toString(lower));
+        repr = string.concat(toString(upper), ".", decimals != 0 ? toString(lower) : "");
 
         if (log_mat_extended) repr = string.concat(repr, " [", toHexString(uint64(uint256(ua)), 8), "]");
     }

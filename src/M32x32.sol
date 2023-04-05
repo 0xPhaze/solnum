@@ -1947,82 +1947,81 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
         uint256 ptrAColSize = 8 * n;
         uint256 ptrAColEnd;
 
-        // if (ptrAColSize & 31 != 0) {
-        //     // Handle partial blocks of `A` containing less than 4 rows.
-        //     // Note: This step adds dirty values to `C` when not preserving the existing memory.
-        //     //       However, as this is done before the main block loop,
-        //     //       any dirty values will be overwritten later.
-        //     // ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
-        //     // ╎  1     2     3     4   ╎  5     6     7   ┆
-        //     // ╎  8     9     10    11  ╎  12    13    14  ┆
-        //     // ╎  15    16    17    18  ╎  19    20    21  ┆
-        //     // ╎  22    23    24    25  ╎  26    27    28  ┆
-        //     // ┢━━━━━━━━━━━━━━━━━━━━━━━━╅╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-        //     // ┃  29    30    31    32  ┃  33    34    35  ┆
-        //     // ┃  36    37    38    39  ┃  40    41    42  ┆
-        //     // ┃  43    44    45    46  ┃  47    48    49  ┆
-        //     // ┗━━━━━━━━━━━━━━━━━━━━━━━━┹╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
-        //     //
-        //     // Place `ptrA` at the beginning of the first row of `A` that is not a multiple of 4.
-        //     ptrACol = ref(A) + (ptrAColSize & ~uint256(31)) * m;
-        //     // Place `ptrC` at the corresponding location in `C`.
-        //     ptrCRow = ref(C) + (ptrAColSize & ~uint256(31));
-        //     // End at last full multiple of 4.
-        //     ptrAColEnd = ptrACol + (ptrARowSize & ~uint256(31));
+        if (ptrAColSize & 31 != 0) {
+            // Handle partial blocks of `A` containing less than 4 rows.
+            // Note: This step adds dirty values to `C` when not preserving the existing memory.
+            //       However, as this is done before the main block loop,
+            //       any dirty values will be overwritten later.
+            // ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
+            // ╎  1     2     3     4   ╎  5     6     7   ┆
+            // ╎  8     9     10    11  ╎  12    13    14  ┆
+            // ╎  15    16    17    18  ╎  19    20    21  ┆
+            // ╎  22    23    24    25  ╎  26    27    28  ┆
+            // ┢━━━━━━━━━━━━━━━━━━━━━━━━╅╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+            // ┃  29    30    31    32  ┃  33    34    35  ┆
+            // ┃  36    37    38    39  ┃  40    41    42  ┆
+            // ┃  43    44    45    46  ┃  47    48    49  ┆
+            // ┗━━━━━━━━━━━━━━━━━━━━━━━━┹╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+            //
+            // Place `ptrA` at the beginning of the first row of `A` that is not a multiple of 4.
+            ptrACol = ref(A) + (ptrAColSize & ~uint256(31)) * m;
+            // Place `ptrC` at the corresponding location in `C`.
+            ptrCRow = ref(C) + (ptrAColSize & ~uint256(31));
+            // End at last full multiple of 4.
+            ptrAColEnd = ptrACol + (ptrARowSize & ~uint256(31));
 
-        //     // Loop over `A`s columns → (`C`s rows ↓) in strides of 4 .
-        //     while (ptrACol != ptrAColEnd) {
-        //         // NOTE: move out.
-        //         uint256 ptrA = ptrACol; // Start at the beginning of the current column.
-        //         uint256 ptrC = ptrCRow; // Start at the beginning of the current row.
+            // Loop over `A`s columns → (`C`s rows ↓) in strides of 4.
+            while (ptrACol != ptrAColEnd) {
+                // NOTE: move out.
+                uint256 ptrA = ptrACol; // Start at the beginning of the current column.
+                uint256 ptrC = ptrCRow; // Start at the beginning of the current row.
 
-        //         assembly {
-        //             // Load block of packed elements of the next 3 rows and 4 columns of `A`: `A[i:i+3,j:j+4]`.
-        //             // The last row is not used required, as otherwise the row count would have been divisible by 4.
-        //             // We might not require all 4 columns, however these will be overwritten later in the main loop.
-        //             let a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
-        //             ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
-        //             let a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
-        //             ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
-        //             let a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
-        //             ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                assembly {
+                    // Load block of packed elements of the next 3 rows and 4 columns of `A`: `A[i:i+3,j:j+4]`.
+                    // The last row is not used required, as otherwise the row count would have been divisible by 4.
+                    // We might not require all 4 columns, however these will be overwritten later in the main loop.
+                    let a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
+                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    let a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
+                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    let a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
 
-        //             // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
-        //             let mask := shl(192, UINT64_MASK)
-        //             let c1X4 := and(a1X4, mask)
-        //             c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
-        //             c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
+                    // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
+                    let mask := shl(192, UINT64_MASK)
+                    let c1X4 := and(a1X4, mask)
+                    c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
+                    c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
 
-        //             mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
+                    mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
 
-        //             // Pack elements from `A[i:i+3,j+1]` into `C[j+1,i:i+3]`.
-        //             mask := shl(128, UINT64_MASK)
-        //             let c2X4 := shl(64, and(a1X4, shl(128, UINT64_MASK)))
-        //             c2X4 := or(c2X4, and(a2X4, shl(128, UINT64_MASK)))
-        //             c2X4 := or(c2X4, shr(64, and(a3X4, shl(128, UINT64_MASK))))
+                    // Pack elements from `A[i:i+3,j+1]` into `C[j+1,i:i+3]`.
+                    mask := shl(128, UINT64_MASK)
+                    let c2X4 := shl(64, and(a1X4, mask))
+                    c2X4 := or(c2X4, and(a2X4, mask))
+                    c2X4 := or(c2X4, shr(64, and(a3X4, mask)))
 
-        //             mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
 
-        //             // Pack elements from `A[i:i+3,j+2]` into `C[j+2,i:i+3]`.
-        //             mask := shl(64, UINT64_MASK)
-        //             let c3X4 := shl(128, and(a1X4, mask))
-        //             c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
-        //             c3X4 := or(c3X4, shr(0, and(a3X4, mask)))
+                    // Pack elements from `A[i:i+3,j+2]` into `C[j+2,i:i+3]`.
+                    mask := shl(64, UINT64_MASK)
+                    let c3X4 := shl(128, and(a1X4, mask))
+                    c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
+                    c3X4 := or(c3X4, and(a3X4, mask))
 
-        //             mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
 
-        //             // Pack elements from `A[i:i+3,j+3]` into `C[j+3,i:i+3]`.
-        //             let c4X4 := shl(192, and(a1X4, UINT64_MASK))
-        //             c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
-        //             c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
+                    // Pack elements from `A[i:i+3,j+3]` into `C[j+3,i:i+3]`.
+                    let c4X4 := shl(192, and(a1X4, UINT64_MASK))
+                    c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
+                    c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
 
-        //             mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
-        //         }
+                    mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
+                }
 
-        //         ptrACol = ptrACol + 32; // Advance column pointer to the next column → of `A` in strides of 4.
-        //         ptrCRow = ptrCRow + 4 * ptrAColSize; // Advance row pointer to the next row ↓ of `C` in strides of 4.
-        //     }
-        // }
+                ptrACol = ptrACol + 32; // Advance column pointer to the next column → of `A` in strides of 4.
+                ptrCRow = ptrCRow + 4 * ptrAColSize; // Advance row pointer to the next row ↓ of `C` in strides of 4.
+            }
+        }
 
         // Handle all blocks of 4x4 elements.
         //
@@ -2041,7 +2040,7 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
         // End iterating over `A`s columns ➞ when arriving at the last column multiple of 4.
         ptrAColEnd = ptrACol + (ptrARowSize & ~uint256(31));
         //
-        // Outer loop over `A`s columns → (`C`s rows ↓) in strides of 4 .
+        // Outer loop over `A`s columns → (`C`s rows ↓) in strides of 4.
         while (ptrACol != ptrAColEnd) {
             uint256 ptrA = ptrACol; // Start at the beginning of the current column.
             uint256 ptrC = ptrCRow; // Start at the beginning of the current row.
@@ -2071,10 +2070,10 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
 
                     // Pack elements from `A[i:i+4,j+1]` into `C[j+1,i:i+4]`.
                     mask := shl(128, UINT64_MASK)
-                    let c2X4 := shl(64, and(a1X4, shl(128, UINT64_MASK)))
-                    c2X4 := or(c2X4, and(a2X4, shl(128, UINT64_MASK)))
-                    c2X4 := or(c2X4, shr(64, and(a3X4, shl(128, UINT64_MASK))))
-                    c2X4 := or(c2X4, shr(128, and(a4X4, shl(128, UINT64_MASK))))
+                    let c2X4 := shl(64, and(a1X4, mask))
+                    c2X4 := or(c2X4, and(a2X4, mask))
+                    c2X4 := or(c2X4, shr(64, and(a3X4, mask)))
+                    c2X4 := or(c2X4, shr(128, and(a4X4, mask)))
 
                     mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
 
@@ -2091,7 +2090,7 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
                     let c4X4 := shl(192, and(a1X4, UINT64_MASK))
                     c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
                     c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
-                    c4X4 := or(c4X4, shr(0, and(a4X4, UINT64_MASK)))
+                    c4X4 := or(c4X4, and(a4X4, UINT64_MASK))
 
                     mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
                 }
@@ -2104,80 +2103,95 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
             ptrCRow = ptrCRow + 4 * ptrAColSize; // Advance row pointer to the next row ↓ of `C` in strides of 4.
         }
 
-        // if (ptrARowSize & 31 != 0) {
-        //     // Handle the last rows of `A` that are not a multiple of 4.
-        //     // ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┲━━━━━━━━━━━━━━━━━━┓
-        //     // ┆  1     2     3     4   ┃  5     6     7   ┃
-        //     // ┆  8     9     10    11  ┃  12    13    14  ┃
-        //     // ┆  15    16    17    18  ┃  19    20    21  ┃
-        //     // ┆  22    23    24    25  ┃  26    27    28  ┃
-        //     // ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╄━━━━━━━━━━━━━━━━━━┩
-        //     // ╎  29    30    31    32  ╎  33    34    35  ┆
-        //     // ╎  36    37    38    39  ╎  40    41    42  ┆
-        //     // ╎  43    44    45    46  ╎  47    48    49  ┆
-        //     // └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┴╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
-        //     //
-        //     // Note: think this should be `ptrARow` for conformity.
-        //     // Place `ptrA` at the beginning of the first column of `A` that is not a multiple of 4.
-        //     ptrACol = ref(A) + (ptrAColSize & ~uint256(31));
-        //     // Place `ptrC` at the equivalent location in `C`.
-        //     ptrCRow = ref(C) + (ptrAColSize & ~uint256(31)) * m;
-        //     // End at last full multiple of 4.
-        //     ptrAColEnd = ptrACol + (ptrAColSize & ~uint256(31));
+        if (ptrARowSize & 31 != 0) {
+            uint256 ptrARow;
+            uint256 ptrARowEnd;
+            uint256 ptrCCol;
 
-        //     // Loop over `A`s rows ↓ (`C`s columns →) in strides of 4 .
-        //     while (ptrACol != ptrAColEnd) {
-        //         // NOTE: move out.
-        //         uint256 ptrA = ptrACol; // Start at the beginning of the current column.
-        //         uint256 ptrC = ptrCRow; // Start at the beginning of the current row.
+            // Handle the last rows of `A` that are not a multiple of 4.
+            // ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┲━━━━━━━━━━━━━━━━━━┓
+            // ┆  1     2     3     4   ┃  5     6     7   ┃
+            // ┆  8     9     10    11  ┃  12    13    14  ┃
+            // ┆  15    16    17    18  ┃  19    20    21  ┃
+            // ┆  22    23    24    25  ┃  26    27    28  ┃
+            // ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╄━━━━━━━━━━━━━━━━━━┩
+            // ╎  29    30    31    32  ╎  33    34    35  ┆
+            // ╎  36    37    38    39  ╎  40    41    42  ┆
+            // ╎  43    44    45    46  ╎  47    48    49  ┆
+            // └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┴╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+            //
+            // Place `ptrA` at the beginning of the first column of `A` that is not a multiple of 4.
+            ptrARow = ref(A) + (ptrARowSize & ~uint256(31));
+            // Place `ptrC` at the corresponding location in `C`.
+            ptrCCol = ref(C) + (ptrARowSize & ~uint256(31)) * m;
+            // End at last full multiple of 4.
+            ptrARowEnd = ptrARow + (ptrAColSize & ~uint256(31)) * m;
 
-        //         assembly {
-        //             // Load block of packed elements of the next 3 rows and 4 columns of `A`: `A[i:i+3,j:j+4]`.
-        //             // The last row is not used required, as otherwise the row count would have been divisible by 4.
-        //             // We might not require all 4 columns, however these will be overwritten later in the main loop.
-        //             let a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
-        //             ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
-        //             let a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
-        //             ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
-        //             let a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
-        //             ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+            // // Reverse order.
+            // (ptrARow, ptrARowEnd) = (ptrARowEnd, ptrARow);
+            // ptrCCol = ptrCCol + (ptrAColSize & ~uint256(31));
 
-        //             // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
-        //             let mask := shl(192, UINT64_MASK)
-        //             let c1X4 := and(a1X4, mask)
-        //             c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
-        //             c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
+            // Loop over `A`s rows ↓ (`C`s columns →) in strides of 4.
+            while (ptrARow != ptrARowEnd) {
+                // NOTE: move out.
+                uint256 ptrA = ptrARow; // Start at the beginning of the current column.
+                uint256 ptrC = ptrCCol; // Start at the beginning of the current row.
 
-        //             mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
+                uint256 a1X4;
+                uint256 a2X4;
+                uint256 a3X4;
+                uint256 a4X4;
 
-        //             // Pack elements from `A[i:i+3,j+1]` into `C[j+1,i:i+3]`.
-        //             mask := shl(128, UINT64_MASK)
-        //             let c2X4 := shl(64, and(a1X4, shl(128, UINT64_MASK)))
-        //             c2X4 := or(c2X4, and(a2X4, shl(128, UINT64_MASK)))
-        //             c2X4 := or(c2X4, shr(64, and(a3X4, shl(128, UINT64_MASK))))
+                assembly {
+                    // Load block of packed elements of the next 3 rows and 4 columns of `A`: `A[i:i+3,j:j+4]`.
+                    a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
+                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
+                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
+                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    a4X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
 
-        //             mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
+                    // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
+                    let mask := shl(192, UINT64_MASK)
+                    let c1X4 := and(a1X4, mask)
+                    c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
+                    c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
+                    c1X4 := or(c1X4, shr(192, a4X4))
 
-        //             // Pack elements from `A[i:i+3,j+2]` into `C[j+2,i:i+3]`.
-        //             mask := shl(64, UINT64_MASK)
-        //             let c3X4 := shl(128, and(a1X4, mask))
-        //             c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
-        //             c3X4 := or(c3X4, shr(0, and(a3X4, mask)))
+                    mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
+                }
 
-        //             mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
+                if (ptrARowSize & 31 > 15) {
+                    assembly {
+                        // Pack elements from `A[i:i+3,j+1]` into `C[j+1,i:i+3]`.
+                        let mask := shl(128, UINT64_MASK)
+                        let c2X4 := shl(64, and(a1X4, mask))
+                        c2X4 := or(c2X4, and(a2X4, mask))
+                        c2X4 := or(c2X4, shr(64, and(a3X4, mask)))
+                        c2X4 := or(c2X4, shr(128, and(a4X4, mask)))
 
-        //             // Pack elements from `A[i:i+3,j+3]` into `C[j+3,i:i+3]`.
-        //             let c4X4 := shl(192, and(a1X4, UINT64_MASK))
-        //             c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
-        //             c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
+                        mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
+                    }
 
-        //             mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
-        //         }
+                    if (ptrARowSize & 31 == 24) {
+                        assembly {
+                            // Pack elements from `A[i:i+3,j+2]` into `C[j+2,i:i+3]`.
+                            let mask := shl(64, UINT64_MASK)
+                            let c3X4 := shl(128, and(a1X4, mask))
+                            c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
+                            c3X4 := or(c3X4, and(a3X4, mask))
+                            c3X4 := or(c3X4, shr(64, and(a4X4, mask)))
 
-        //         ptrACol = ptrACol + 32; // Advance column pointer to the next column → of `A` in strides of 4.
-        //         ptrCRow = ptrCRow + 4 * ptrAColSize; // Advance row pointer to the next row ↓ of `C` in strides of 4.
-        //     }
-        // }
+                            mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
+                        }
+                    }
+                }
+
+                ptrARow = ptrARow + 4 * ptrARowSize; // Advance row pointer to the next row ↓ of `A` in strides of 4.
+                ptrCCol = ptrCCol + 32; // Advance column pointer to the next column → of `C` in strides of 4.
+            }
+        }
 
         // ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
         // ╎  1     2     3     4   ╎  5     6     7   ┆
