@@ -21,12 +21,18 @@ import {
     MAX,
     uMIN,
     MIN,
-    uMAX_HALF,
-    MAX_HALF,
-    uMIN_HALF,
-    MIN_HALF,
-    UINT32_MASK,
-    UINT64_MASK
+    uHALF_MAX,
+    HALF_MAX,
+    uHALF_MIN,
+    HALF_MIN,
+    UINT32_MAX,
+    UINT64_MAX,
+    MASK_2X4,
+    INT64_MIN_X4,
+    INT32_MAX,
+    INT64_MAX,
+    INT64_SIGN,
+    INT32_SIGN
 } from "./N32x32.sol";
 
 type M32x32 is uint256;
@@ -41,7 +47,7 @@ using {
     sizeBytes,
     ref,
     reshape,
-    bytes_,
+    // bytes_,
     copy,
     at,
     atIndex,
@@ -55,8 +61,10 @@ using {
     addScalarTo_,
     addScalarUnchecked,
     addScalarUncheckedTo_,
+    mulInt,
     mulScalar,
     mulScalarTo_,
+    mulIntUnchecked,
     mulScalarUnchecked,
     mulScalarUncheckedTo_,
     dot,
@@ -75,6 +83,7 @@ using {
     sum,
     mean,
     vari,
+    neg,
     min,
     max,
     minMax,
@@ -118,7 +127,7 @@ function M32x32Header(uint256 ptr, uint256 n, uint256 m) pure returns (M32x32 A)
 function header(M32x32 A) pure returns (uint256 n, uint256 m, uint256 ptr) {
     n = (M32x32.unwrap(A)) & __UM256.MAX_24_BITS;
     m = (M32x32.unwrap(A) >> 24) & __UM256.MAX_24_BITS;
-    ptr = (M32x32.unwrap(A) >> 48) & UINT64_MASK;
+    ptr = (M32x32.unwrap(A) >> 48) & UINT64_MAX;
 }
 
 function shape(M32x32 A) pure returns (uint256 n, uint256 m) {
@@ -153,7 +162,7 @@ function sizeBytes(M32x32 A) pure returns (uint256 size) {
 }
 
 function ref(M32x32 A) pure returns (uint256 ptr) {
-    ptr = (M32x32.unwrap(A) >> 48) & UINT64_MASK;
+    ptr = (M32x32.unwrap(A) >> 48) & UINT64_MAX;
 }
 
 /* ------------- constructors ------------- */
@@ -215,7 +224,7 @@ function eye(uint256 n, uint256 m) pure returns (M32x32 C) {
 
         if (ptr != end) {
             assembly {
-                let preserveWord := and(mload(ptr), not(UINT64_MASK))
+                let preserveWord := and(mload(ptr), not(UINT64_MAX))
 
                 mstore(ptr, or(uONE, preserveWord)) // Store `1` at `ptr`, preserve existing word.
             }
@@ -305,7 +314,7 @@ function atIndex(M32x32 A, uint256 index) pure returns (N32x32 a) {
         ptr = ptr + 8 * (index - 3);
 
         assembly {
-            a := and(mload(ptr), UINT64_MASK)
+            a := and(mload(ptr), UINT64_MAX)
         }
     }
 }
@@ -319,8 +328,8 @@ function setIndex(M32x32 A, uint256 index, N32x32 value) pure {
         ptr = ptr + 8 * (index - 3);
 
         assembly {
-            value := and(value, UINT64_MASK)
-            let preserveWord := and(mload(ptr), not(UINT64_MASK))
+            value := and(value, UINT64_MAX)
+            let preserveWord := and(mload(ptr), not(UINT64_MAX))
 
             mstore(ptr, or(preserveWord, value))
         }
@@ -336,7 +345,7 @@ function at(M32x32 A, uint256 i, uint256 j) pure returns (N32x32 a) {
         ptr = ptr + 8 * (i * m + j - 3);
 
         assembly {
-            a := and(mload(ptr), UINT64_MASK)
+            a := and(mload(ptr), UINT64_MAX)
         }
     }
 }
@@ -350,8 +359,8 @@ function set(M32x32 A, uint256 i, uint256 j, N32x32 value) pure {
         ptr = ptr + 8 * (i * m + j - 3);
 
         assembly {
-            value := and(value, UINT64_MASK)
-            let preserveWord := and(mload(ptr), not(UINT64_MASK))
+            value := and(value, UINT64_MAX)
+            let preserveWord := and(mload(ptr), not(UINT64_MAX))
 
             mstore(ptr, or(preserveWord, value))
         }
@@ -365,7 +374,7 @@ function setUnsafe(M32x32 A, uint256 i, uint256 j, N32x32 value) pure {
         ptr = ptr + 8 * (uint256(i) * m + uint256(j) - 3);
 
         assembly {
-            let preserveWord := and(mload(ptr), not(UINT64_MASK))
+            let preserveWord := and(mload(ptr), not(UINT64_MAX))
 
             mstore(ptr, or(value, preserveWord))
         }
@@ -384,7 +393,6 @@ function addUnchecked(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     addUncheckedTo_(A, B, C);
 }
 
-// todo: adapt to n32
 function addUncheckedTo_(M32x32 A, M32x32 B, M32x32 C) pure {
     unchecked {
         (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
@@ -405,7 +413,10 @@ function addUncheckedTo_(M32x32 A, M32x32 B, M32x32 C) pure {
             assembly {
                 let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
                 let b := mload(ptrB) // Load 4 values from `B` at `ptrB`.
-                let c := add(a, b) // Add packed values together.
+
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(b, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(b, not(MASK_2X4))), not(MASK_2X4)))
 
                 mstore(ptrC, c) // Store packed values in `ptrC`.
             }
@@ -423,7 +434,10 @@ function addUncheckedTo_(M32x32 A, M32x32 B, M32x32 C) pure {
                 let mask := not(shr(mul(rest, 8), not(0)))
                 let a := and(mload(ptrA), mask) // Load packed values from `A` at `ptrA`.
                 let b := and(mload(ptrB), mask) // Load packed values from `B` at `ptrB`.
-                let c := add(a, b) // Add packed values together.
+
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(b, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(b, not(MASK_2X4))), not(MASK_2X4)))
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
             }
@@ -465,14 +479,15 @@ function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
             assembly {
                 let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
                 let b := mload(ptrB) // Load 4 values from `B` at `ptrB`.
-                let c := add(a, b) // Add packed values together.
+
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(b, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(b, not(MASK_2X4))), not(MASK_2X4)))
 
                 mstore(ptrC, c) // Store packed values in `ptrC`.
 
-                overflow := or(overflow, add(add(and(a, UINT64_MASK), and(b, UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
-                overflow := or(overflow, add(add(and(shr(64, a), UINT64_MASK), and(shr(64, b), UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
-                overflow := or(overflow, add(add(and(shr(128, a), UINT64_MASK), and(shr(128, b), UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
-                overflow := or(overflow, add(add(shr(192, a), and(shr(192, b), UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
+                // Overflow when signs of `a` and `s` are equal, but differ from `c`.
+                overflow := or(overflow, and(and(not(xor(a, b)), xor(a, c)), INT64_MIN_X4))
             }
 
             // Advance pointers to the next slot.
@@ -484,21 +499,23 @@ function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
         // Parse the last remaining word.
         if (rest != 0) {
             assembly {
-                // Mask applies to leftover bits in word.
                 let mask := not(shr(mul(rest, 8), not(0)))
                 let a := and(mload(ptrA), mask) // Load packed values from `A` at `ptrA`.
                 let b := and(mload(ptrB), mask) // Load packed values from `B` at `ptrB`.
-                let c := add(a, b) // Add packed values together.
+
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(b, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(b, not(MASK_2X4))), not(MASK_2X4)))
+
+                // Overflow when signs of `a` and `s` are equal, but differ from `c`.
+                overflow := or(overflow, and(and(not(xor(a, b)), xor(a, c)), INT64_MIN_X4))
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
-
-                overflow := or(overflow, add(add(and(shr(64, a), UINT64_MASK), and(shr(64, b), UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
-                overflow := or(overflow, add(add(and(shr(128, a), UINT64_MASK), and(shr(128, b), UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
-                overflow := or(overflow, add(add(shr(192, a), and(shr(192, b), UINT64_MASK)), OVERFLOW_CHECK_INT64)) // forgefmt: disable-line
             }
         }
 
-        if (overflow > UINT64_MASK) revert __N32x32.N32x32_Overflow();
+        // if (overflow != 0) revert __N32x32.N32x32_Overflow();
+        if (overflow > UINT64_MAX) revert __N32x32.N32x32_Overflow();
     }
 }
 
@@ -511,8 +528,8 @@ function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
 /// `ptrB = 8 * (j + k * mb)`
 function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     unchecked {
-        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         if (mA != nB) revert M32x32_IncompatibleDimensions();
 
@@ -520,33 +537,33 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
         uint256 ptrCij = ref(C);
 
-        uint256 ptrARowSize = 8 * mA;
-        uint256 ptrBRowSize = 8 * mB;
+        uint256 rowSizeA = 8 * mA;
+        uint256 rowSizeB = 8 * mB;
 
-        uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
-        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrARowEnd = ptrA + 8 * nA * mA;
+        uint256 ptrARow = ptrA; // Updates by row size of `A` in i-loop.
 
-        uint256 ptrBjEnd = dataPtrB + (ptrBRowSize & ~uint256(31));
-        uint256 ptrBjRest = ptrBRowSize & 31;
-        uint256 ptrBj;
+        uint256 ptrBColEnd = ptrB + (rowSizeB & ~uint256(31));
+        uint256 ptrBjRest = rowSizeB & 31;
+        uint256 ptrBCol;
 
         // Loop over `A`s `i` indices (rows).
-        while (ptrAi != ptrAiEnd) {
+        while (ptrARow != ptrARowEnd) {
             // i-loop start.
 
-            ptrBj = dataPtrB;
+            ptrBCol = ptrB;
 
             // Loop over `B`s `j` indices (cols).
-            while (ptrBj != ptrBjEnd) {
+            while (ptrBCol != ptrBColEnd) {
                 // j-loop start.
 
-                uint256 ptrBkj = ptrBj;
-                uint256 ptrAik = ptrAi;
+                uint256 ptrBkj = ptrBCol;
+                uint256 ptrAik = ptrARow;
                 // End inner loop after one row of `A`.
                 // Up until here we can load & parse full words (4 elements).
-                uint256 ptrAikEnd = ptrAi + (ptrARowSize & ~uint256(31));
+                uint256 ptrAEnd = ptrARow + (rowSizeA & ~uint256(31));
                 // The rest needs to be parsed individually.
-                uint256 ptrAikRest = ptrARowSize & 31;
+                uint256 ptrARest = rowSizeA & 31;
 
                 // Perform the dot product on the current
                 // row vector `Ai` and the column vector `Bj`.
@@ -554,47 +571,47 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 uint256 cX4;
 
                 // Loop over `A`s cols and `B`s rows in strides of 4.
-                while (ptrAik != ptrAikEnd) {
+                while (ptrAik != ptrAEnd) {
                     // k-loop start.
 
                     assembly {
                         let aX4 := mload(ptrAik) // Load packed A[i:i+4,k].
 
                         let b1X4 := mload(ptrBkj) // Load packed B[k+0,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b2X4 := mload(ptrBkj) // Load packed B[k+1,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b3X4 := mload(ptrBkj) // Load packed B[k+2,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b4X4 := mload(ptrBkj) // Load packed B[k+3,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
 
                         cX4 := add(cX4, mul(shr(192, aX4), b1X4))
-                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), b2X4))
-                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), b3X4))
-                        cX4 := add(cX4, mul(and(aX4, UINT64_MASK), b4X4))
+                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), b2X4))
+                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), b3X4))
+                        cX4 := add(cX4, mul(and(aX4, UINT64_MAX), b4X4))
                     }
 
                     ptrAik = ptrAik + 32; // Advance to the next column → of `A` in strides of 4.
                 }
 
                 // Parse the last remaining word.
-                if (ptrAikRest != 0) {
+                if (ptrARest != 0) {
                     assembly {
                         // Mask applies to leftover bits in word.
-                        let mask := not(shr(mul(ptrAikRest, 8), not(0)))
+                        let mask := not(shr(mul(ptrARest, 8), not(0)))
                         let aX4 := and(mload(ptrAik), mask) // Load packed values from `A` at `ptrA`.
 
                         let b1X4 := mload(ptrBkj) // Load packed B[k+0,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b2X4 := mload(ptrBkj) // Load packed B[k+1,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b3X4 := mload(ptrBkj) // Load packed B[k+2,j:j+4].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
 
                         cX4 := add(cX4, mul(shr(192, aX4), and(b1X4, mask)))
-                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), and(b2X4, mask)))
-                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), and(b3X4, mask)))
+                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), and(b2X4, mask)))
+                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), and(b3X4, mask)))
                     }
                 }
 
@@ -603,7 +620,7 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 }
 
                 ptrCij = ptrCij + 32; // Advance to the next element of `C` in strides of 4.
-                ptrBj = ptrBj + 32; // Advance to the next column → of `B` in strides of 4.
+                ptrBCol = ptrBCol + 32; // Advance to the next column → of `B` in strides of 4.
             }
 
             if (ptrBjRest != 0) {
@@ -614,13 +631,13 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                     maskBj := not(shr(mul(ptrBjRest, 8), not(0)))
                 }
 
-                uint256 ptrBkj = ptrBj;
-                uint256 ptrAik = ptrAi;
+                uint256 ptrBkj = ptrBCol;
+                uint256 ptrAik = ptrARow;
                 // End inner loop after one row of `A`.
                 // Up until here we can load & parse full words (4 elements).
-                uint256 ptrAikEnd = ptrAi + (ptrARowSize & ~uint256(31));
+                uint256 ptrAEnd = ptrARow + (rowSizeA & ~uint256(31));
                 // // The rest needs to be parsed individually.
-                // uint256 ptrAikRest = ptrARowSize & 31;
+                // uint256 ptrARest = rowSizeA & 31;
 
                 // Perform the dot product on the current
                 // row vector `Ai` and the column vector `Bj`.
@@ -628,46 +645,46 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 uint256 cX4;
 
                 // Loop over `A`s cols and `B`s rows in strides of 4.
-                while (ptrAik != ptrAikEnd) {
+                while (ptrAik != ptrAEnd) {
                     // k-loop start.
 
                     assembly {
                         let aX4 := mload(ptrAik) // Load packed A[i,k].
 
                         let b1X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b2X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b3X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b4X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
 
                         cX4 := add(cX4, mul(shr(192, aX4), b1X4))
-                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), b2X4))
-                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), b3X4))
-                        cX4 := add(cX4, mul(and(aX4, UINT64_MASK), b4X4))
+                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), b2X4))
+                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), b3X4))
+                        cX4 := add(cX4, mul(and(aX4, UINT64_MAX), b4X4))
                     }
 
                     ptrAik = ptrAik + 32; // Advance to the next column → of `A` in strides of 4.
                 }
 
                 // Parse the last remaining word.
-                if (ptrARowSize & 31 != 0) {
+                if (rowSizeA & 31 != 0) {
                     assembly {
                         // Mask applies to leftover bits in word.
-                        let mask := not(shr(mul(and(ptrARowSize, 31), 8), not(0)))
+                        let mask := not(shr(mul(and(rowSizeA, 31), 8), not(0)))
                         let aX4 := and(mload(ptrAik), mask) // Load packed values from `A` at `ptrA`.
 
                         let b1X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b2X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b3X4 := and(mload(ptrBkj), maskBj) // Load packed B[k,j].
 
                         cX4 := add(cX4, mul(shr(192, aX4), and(b1X4, mask)))
-                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), and(b2X4, mask)))
-                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), and(b3X4, mask)))
+                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), and(b2X4, mask)))
+                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), and(b3X4, mask)))
                     }
                 }
 
@@ -678,7 +695,7 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 ptrCij = ptrCij + (ptrBjRest & 31); // Advance to the next row ↓ of `C`.
             }
 
-            ptrAi = ptrAi + ptrARowSize; // Advance to the next row ↓ of `A`.
+            ptrARow = ptrARow + rowSizeA; // Advance to the next row ↓ of `A`.
         }
     }
 }
@@ -686,8 +703,8 @@ function dot(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 /// @dev Computes `C_ij = A_ik B_jk`
 function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     unchecked {
-        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         if (mA != mB) revert M32x32_IncompatibleDimensions();
 
@@ -697,27 +714,27 @@ function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
         // This way the loaded values will be right-aligned.
         uint256 ptrCij = ref(C);
 
-        uint256 ptrARowSize = 8 * mA;
-        uint256 ptrBRowSize = 8 * mB;
+        uint256 rowSizeA = 8 * mA;
+        uint256 rowSizeB = 8 * mB;
 
-        uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
-        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrARowEnd = ptrA + 8 * nA * mA;
+        uint256 ptrARow = ptrA; // Updates by row size of `A` in i-loop.
 
         // // Up until here we can load & parse full words (4 elements).
-        // uint256 ptrBjEnd = dataPtrB + (ptrBRowSize & ~uint256(31));
+        // uint256 ptrBColEnd = ptrB + (rowSizeB & ~uint256(31));
         // // The rest needs to be parsed individually.
-        // uint256 ptrBjRest = ptrBRowSize & 31;
-        uint256 ptrBjEnd = dataPtrB + 8 * nB * mB;
-        uint256 ptrBj;
+        // uint256 ptrBjRest = rowSizeB & 31;
+        uint256 ptrBColEnd = ptrB + 8 * nB * mB;
+        uint256 ptrBCol;
 
         // Loop over `A`s `i` indices (rows).
-        while (ptrAi != ptrAiEnd) {
+        while (ptrARow != ptrARowEnd) {
             // i-loop start.
 
-            ptrBj = dataPtrB;
+            ptrBCol = ptrB;
 
             // Loop over `B`s `j` indices (rows).
-            while (ptrBj != ptrBjEnd) {
+            while (ptrBCol != ptrBColEnd) {
                 // j-loop start.
 
                 uint256 l;
@@ -727,25 +744,25 @@ function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 uint256 cX4;
 
                 while (true) {
-                    uint256 ptrBjk = ptrBj;
-                    uint256 ptrAik = ptrAi;
+                    uint256 ptrBjk = ptrBCol;
+                    uint256 ptrAik = ptrARow;
                     // End inner loop after one row of `A`.
                     // Up until here we can load & parse full words (4 elements).
-                    uint256 ptrAikEnd = ptrAi + (ptrARowSize & ~uint256(31));
+                    uint256 ptrAEnd = ptrARow + (rowSizeA & ~uint256(31));
                     // The rest needs to be parsed individually.
-                    uint256 ptrAikRest = ptrARowSize & 31;
+                    uint256 ptrARest = rowSizeA & 31;
 
                     // Loop over `A`s cols and `B`s cols in strides of 4.
-                    while (ptrAik != ptrAikEnd) {
+                    while (ptrAik != ptrAEnd) {
                         // k-loop start.
 
                         assembly {
                             let aX4 := mload(ptrAik) // Load packed A[i,k].
                             let bX4 := mload(ptrBjk) // Load packed B[j,k].
 
-                            cX4 := add(cX4, mul(and(aX4, UINT64_MASK), and(bX4, UINT64_MASK)))
-                            cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), and(shr(64, bX4), UINT64_MASK)))
-                            cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), and(shr(128, bX4), UINT64_MASK)))
+                            cX4 := add(cX4, mul(and(aX4, UINT64_MAX), and(bX4, UINT64_MAX)))
+                            cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), and(shr(64, bX4), UINT64_MAX)))
+                            cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), and(shr(128, bX4), UINT64_MAX)))
                             cX4 := add(cX4, mul(shr(192, aX4), shr(192, bX4)))
                         }
 
@@ -754,20 +771,20 @@ function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                     }
 
                     // Parse the last remaining word.
-                    if (ptrAikRest != 0) {
+                    if (ptrARest != 0) {
                         assembly {
                             // Mask applies to leftover bits in word.
-                            let mask := not(shr(mul(ptrAikRest, 8), not(0)))
+                            let mask := not(shr(mul(ptrARest, 8), not(0)))
                             let aX4 := and(mload(ptrAik), mask) // Load packed values from `A` at `ptrA`.
                             let bX4 := and(mload(ptrBjk), mask) // Load packed values from `B` at `ptrB`.
 
-                            cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), and(shr(64, bX4), UINT64_MASK)))
-                            cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), and(shr(128, bX4), UINT64_MASK)))
+                            cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), and(shr(64, bX4), UINT64_MAX)))
+                            cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), and(shr(128, bX4), UINT64_MAX)))
                             cX4 := add(cX4, mul(shr(192, aX4), shr(192, bX4)))
                         }
                     }
 
-                    ptrBj = ptrBj + ptrBRowSize; // Advance to the next row ↓ of `B`.
+                    ptrBCol = ptrBCol + rowSizeB; // Advance to the next row ↓ of `B`.
 
                     if (l == 3) break;
 
@@ -777,7 +794,7 @@ function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
                 assembly {
                     // // Preserve the previous data in memory.
-                    // let word := and(mload(ptrCij), not(UINT64_MASK))
+                    // let word := and(mload(ptrCij), not(UINT64_MAX))
 
                     mstore(ptrCij, cX4) // Store the result in C[i,j].
                 }
@@ -785,15 +802,15 @@ function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 ptrCij = ptrCij + 32; // Advance to the next element of `C` in strides of 4.
             }
 
-            ptrAi = ptrAi + ptrARowSize; // Advance to the next row ↓ of `A`.
+            ptrARow = ptrARow + rowSizeA; // Advance to the next row ↓ of `A`.
         }
     }
 }
 
 function dotX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     unchecked {
-        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+        (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+        (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
         if (mA != nB) revert M32x32_IncompatibleDimensions();
         if ((mB | mA) & 3 != 0) revert M32x32_DimensionsNotDivisibleBy4();
@@ -802,29 +819,29 @@ function dotX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
         uint256 ptrCij = ref(C);
 
-        uint256 ptrARowSize = 8 * mA;
-        uint256 ptrBRowSize = 8 * mB;
+        uint256 rowSizeA = 8 * mA;
+        uint256 rowSizeB = 8 * mB;
 
-        uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
-        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrARowEnd = ptrA + 8 * nA * mA;
+        uint256 ptrARow = ptrA; // Updates by row size of `A` in i-loop.
 
-        uint256 ptrBjEnd = dataPtrB + ptrBRowSize;
-        uint256 ptrBj;
+        uint256 ptrBColEnd = ptrB + rowSizeB;
+        uint256 ptrBCol;
 
         // Loop over `A`s `i` indices (rows).
-        while (ptrAi != ptrAiEnd) {
+        while (ptrARow != ptrARowEnd) {
             // i-loop start.
 
-            ptrBj = dataPtrB;
+            ptrBCol = ptrB;
 
             // Loop over `B`s `j` indices (cols).
-            while (ptrBj != ptrBjEnd) {
+            while (ptrBCol != ptrBColEnd) {
                 // j-loop start.
 
-                uint256 ptrBkj = ptrBj;
-                uint256 ptrAik = ptrAi;
+                uint256 ptrBkj = ptrBCol;
+                uint256 ptrAik = ptrARow;
                 // End inner loop after one row of `A`.
-                uint256 ptrAikEnd = ptrAi + ptrARowSize;
+                uint256 ptrAEnd = ptrARow + rowSizeA;
 
                 // Perform the dot product on the current
                 // row vector `Ai` and the column vector `Bj`.
@@ -832,25 +849,25 @@ function dotX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 uint256 cX4;
 
                 // Loop over `A`s cols and `B`s rows in strides of 4.
-                while (ptrAik != ptrAikEnd) {
+                while (ptrAik != ptrAEnd) {
                     // k-loop start.
 
                     assembly {
                         let aX4 := mload(ptrAik) // Load packed A[i,k].
 
                         let b1X4 := mload(ptrBkj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b2X4 := mload(ptrBkj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b3X4 := mload(ptrBkj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
                         let b4X4 := mload(ptrBkj) // Load packed B[k,j].
-                        ptrBkj := add(ptrBkj, ptrBRowSize) // Advance to the next row ↓ of `B`.
+                        ptrBkj := add(ptrBkj, rowSizeB) // Advance to the next row ↓ of `B`.
 
                         cX4 := add(cX4, mul(shr(192, aX4), b1X4))
-                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), b2X4))
-                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), b3X4))
-                        cX4 := add(cX4, mul(and(aX4, UINT64_MASK), b4X4))
+                        cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), b2X4))
+                        cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), b3X4))
+                        cX4 := add(cX4, mul(and(aX4, UINT64_MAX), b4X4))
                     }
 
                     ptrAik = ptrAik + 32; // Advance to the next column → of `A` in strides of 4.
@@ -861,10 +878,10 @@ function dotX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
                 }
 
                 ptrCij = ptrCij + 32; // Advance to the next element of `C` in strides of 4.
-                ptrBj = ptrBj + 32; // Advance to the next column → of `B` in strides of 4.
+                ptrBCol = ptrBCol + 32; // Advance to the next column → of `B` in strides of 4.
             }
 
-            ptrAi = ptrAi + ptrARowSize; // Advance to the next row ↓ of `A`.
+            ptrARow = ptrARow + rowSizeA; // Advance to the next row ↓ of `A`.
         }
     }
 }
@@ -872,8 +889,8 @@ function dotX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 /// @dev Computes `C_ij = A_ik B_jk`
 function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     unchecked {
-        (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-        (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+        (uint256 nA, uint256 mA, uint256 refA) = header(A);
+        (uint256 nB, uint256 mB, uint256 refB) = header(B);
 
         if (mA != mB) revert M32x32_IncompatibleDimensions();
 
@@ -881,97 +898,97 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
         // Offset pointer by 3 (of 4) 8 byte chunks.
         // This way the loaded values will be right-aligned.
-        uint256 ptrCij = ref(C) - 24;
+        uint256 ptrC = ref(C) - 24;
 
-        uint256 ptrARowSize = 8 * mA;
-        uint256 ptrBRowSize = 8 * mB;
+        uint256 rowSizeA = 8 * mA;
+        uint256 rowSizeB = 8 * mB;
 
-        uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
-        uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
+        uint256 ptrARowEnd = refA + 8 * nA * mA;
+        uint256 ptrARow = refA; // Updates by row size of `A` in i-loop.
 
-        // // Up until here we can load & parse full words (4 elements).
-        // uint256 ptrBjEnd = dataPtrB + (ptrBRowSize & ~uint256(31));
-        // // The rest needs to be parsed individually.
-        // uint256 ptrBjRest = ptrBRowSize & 31;
-        uint256 ptrBjEnd = dataPtrB + 8 * nB * mB;
-        uint256 ptrBj;
+        uint256 ptrBRowEnd = refB + 8 * nB * mB;
+        uint256 ptrBRow;
 
-        // Loop over `A`s `i` indices (rows).
-        while (ptrAi != ptrAiEnd) {
-            // i-loop start.
+        // Keep track of overflow
+        uint256 overflow;
 
-            ptrBj = dataPtrB;
+        // Loop over `A`s rows ↓.
+        while (ptrARow != ptrARowEnd) {
+            ptrBRow = refB;
 
-            // Loop over `B`s `j` indices (rows).
-            while (ptrBj != ptrBjEnd) {
-                // j-loop start.
-
-                uint256 ptrBjk = ptrBj;
-                uint256 ptrAik = ptrAi;
+            // Loop over `B`s rows ↓.
+            while (ptrBRow != ptrBRowEnd) {
+                uint256 ptrA = ptrARow;
+                uint256 ptrB = ptrBRow;
                 // End inner loop after one row of `A`.
                 // Up until here we can load & parse full words (4 elements).
-                uint256 ptrAikEnd = ptrAi + (ptrARowSize & ~uint256(31));
+                uint256 ptrAEnd = ptrARow + (rowSizeA & ~uint256(31));
                 // The rest needs to be parsed individually.
-                uint256 ptrAikRest = ptrARowSize & 31;
+                uint256 ptrARest = rowSizeA & 31;
 
                 // Perform the dot product on the current
-                // row vector `Ai` and the row vector `Bj`.
+                // row vector in `A` and the row vector `B`.
                 // Store the result in `c`.
                 uint256 c;
 
-                // Loop over `A`s cols and `B`s cols in strides of 4.
-                while (ptrAik != ptrAikEnd) {
-                    // k-loop start.
-
+                // Loop over `A`s cols → and `B`s cols → in strides of 4.
+                while (ptrA != ptrAEnd) {
                     assembly {
-                        let aX4 := mload(ptrAik) // Load packed A[i,k].
-                        let bX4 := mload(ptrBjk) // Load packed B[j,k].
+                        let aX4 := mload(ptrA) // Load packed A[i,k].
+                        let bX4 := mload(ptrB) // Load packed B[j,k].
 
-                        c := add(c, mul(and(aX4, UINT64_MASK), and(bX4, UINT64_MASK)))
-                        c := add(c, mul(and(shr(64, aX4), UINT64_MASK), and(shr(64, bX4), UINT64_MASK)))
-                        c := add(c, mul(and(shr(128, aX4), UINT64_MASK), and(shr(128, bX4), UINT64_MASK)))
-                        c := add(c, mul(shr(192, aX4), shr(192, bX4)))
+                        c := add(c, mul(signextend(7, aX4), signextend(7, bX4)))
+                        c := add(c, mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4))))
+                        c := add(c, mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4))))
+                        c := add(c, mul(sar(192, aX4), sar(192, bX4)))
                     }
 
-                    ptrAik = ptrAik + 32; // Advance to the next column → of `A` in strides of 4.
-                    ptrBjk = ptrBjk + 32; // Advance to the next column → of `B` in strides of 4.
+                    ptrA = ptrA + 32; // Advance to the next column → of `A` in strides of 4.
+                    ptrB = ptrB + 32; // Advance to the next column → of `B` in strides of 4.
                 }
 
                 // Parse the last remaining word.
-                if (ptrAikRest != 0) {
+                if (ptrARest != 0) {
                     assembly {
                         // Mask applies to leftover bits in word.
-                        let mask := not(shr(mul(ptrAikRest, 8), not(0)))
-                        let aX4 := and(mload(ptrAik), mask) // Load packed values from `A` at `ptrA`.
-                        let bX4 := and(mload(ptrBjk), mask) // Load packed values from `B` at `ptrB`.
+                        let mask := not(shr(mul(ptrARest, 8), not(0)))
+                        let aX4 := and(mload(ptrA), mask) // Load packed values from `A` at `ptrA`.
+                        let bX4 := and(mload(ptrB), mask) // Load packed values from `B` at `ptrB`.
 
-                        c := add(c, mul(and(shr(64, aX4), UINT64_MASK), and(shr(64, bX4), UINT64_MASK)))
-                        c := add(c, mul(and(shr(128, aX4), UINT64_MASK), and(shr(128, bX4), UINT64_MASK)))
-                        c := add(c, mul(shr(192, aX4), shr(192, bX4)))
+                        c := add(c, mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4))))
+                        c := add(c, mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4))))
+                        c := add(c, mul(sar(192, aX4), sar(192, bX4)))
                     }
                 }
 
                 assembly {
-                    // Preserve the previous data in memory.
-                    let word := and(mload(ptrCij), not(UINT64_MASK))
-
-                    mstore(ptrCij, or(word, c)) // Store the result in C[i,j].
+                    c := sar(32, c)
+                    overflow := or(overflow, add(c, INT64_SIGN))
                 }
 
-                ptrCij = ptrCij + 8; // Advance to the next element of `C`.
-                ptrBj = ptrBj + ptrBRowSize; // Advance to the next row ↓ of `B`.
+                assembly {
+                    // Preserve the previous data in memory.
+                    let word := and(mload(ptrC), not(UINT64_MAX))
+
+                    mstore(ptrC, or(word, c)) // Store the result in C[i,j].
+                }
+
+                ptrC = ptrC + 8; // Advance to the next element of `C`.
+                ptrBRow = ptrBRow + rowSizeB; // Advance to the next row ↓ of `B`.
             }
 
-            ptrAi = ptrAi + ptrARowSize; // Advance to the next row ↓ of `A`.
+            ptrARow = ptrARow + rowSizeA; // Advance to the next row ↓ of `A`.
         }
+
+        if (overflow > UINT64_MAX) revert __N32x32.N32x32_Overflow();
     }
 }
 
 // /// @dev Computes `C_ij = A_ik B_jk`
 // function dotTransposedX4(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 //     unchecked {
-//         (uint256 nA, uint256 mA, uint256 dataPtrA) = header(A);
-//         (uint256 nB, uint256 mB, uint256 dataPtrB) = header(B);
+//         (uint256 nA, uint256 mA, uint256 ptrA) = header(A);
+//         (uint256 nB, uint256 mB, uint256 ptrB) = header(B);
 
 //         if (mA != mB) revert M32x32_IncompatibleDimensions();
 
@@ -981,27 +998,27 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 //         // This way the loaded values will be right-aligned.
 //         uint256 ptrCij = ref(C);
 
-//         uint256 ptrARowSize = 8 * mA;
-//         uint256 ptrBRowSize = 8 * mB;
+//         uint256 rowSizeA = 8 * mA;
+//         uint256 rowSizeB = 8 * mB;
 
-//         uint256 ptrAiEnd = dataPtrA + 8 * nA * mA;
-//         uint256 ptrAi = dataPtrA; // Updates by row size of `A` in i-loop.
+//         uint256 ptrARowEnd = ptrA + 8 * nA * mA;
+//         uint256 ptrARow = ptrA; // Updates by row size of `A` in i-loop.
 
 //         // // Up until here we can load & parse full words (4 elements).
-//         // uint256 ptrBjEnd = dataPtrB + (ptrBRowSize & ~uint256(31));
+//         // uint256 ptrBRowEnd = ptrB + (rowSizeB & ~uint256(31));
 //         // // The rest needs to be parsed individually.
-//         // uint256 ptrBjRest = ptrBRowSize & 31;
-//         uint256 ptrBjEnd = dataPtrB + 8 * nB * mB;
-//         uint256 ptrBj;
+//         // uint256 ptrBjRest = rowSizeB & 31;
+//         uint256 ptrBRowEnd = ptrB + 8 * nB * mB;
+//         uint256 ptrBRow;
 
 //         // Loop over `A`s `i` indices (rows).
-//         while (ptrAi != ptrAiEnd) {
+//         while (ptrARow != ptrARowEnd) {
 //             // i-loop start.
 
-//             ptrBj = dataPtrB;
+//             ptrBRow = ptrB;
 
 //             // Loop over `B`s `j` indices (rows).
-//             while (ptrBj != ptrBjEnd) {
+//             while (ptrBRow != ptrBRowEnd) {
 //                 // j-loop start.
 
 //                 uint256 l;
@@ -1011,25 +1028,25 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 //                 uint256 cX4;
 
 //                 while (true) {
-//                     uint256 ptrBjk = ptrBj;
-//                     uint256 ptrAik = ptrAi;
+//                     uint256 ptrBjk = ptrBRow;
+//                     uint256 ptrAik = ptrARow;
 //                     // End inner loop after one row of `A`.
 //                     // Up until here we can load & parse full words (4 elements).
-//                     uint256 ptrAikEnd = ptrAi + (ptrARowSize & ~uint256(31));
+//                     uint256 ptrAEnd = ptrARow + (rowSizeA & ~uint256(31));
 //                     // The rest needs to be parsed individually.
-//                     uint256 ptrAikRest = ptrARowSize & 31;
+//                     uint256 ptrARest = rowSizeA & 31;
 
 //                     // Loop over `A`s cols and `B`s cols in strides of 4.
-//                     while (ptrAik != ptrAikEnd) {
+//                     while (ptrAik != ptrAEnd) {
 //                         // k-loop start.
 
 //                         assembly {
 //                             let aX4 := mload(ptrAik) // Load packed A[i,k].
 //                             let bX4 := mload(ptrBjk) // Load packed B[j,k].
 
-//                             cX4 := add(cX4, mul(and(aX4, UINT64_MASK), and(bX4, UINT64_MASK)))
-//                             cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), and(shr(64, bX4), UINT64_MASK)))
-//                             cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), and(shr(128, bX4), UINT64_MASK)))
+//                             cX4 := add(cX4, mul(and(aX4, UINT64_MAX), and(bX4, UINT64_MAX)))
+//                             cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), and(shr(64, bX4), UINT64_MAX)))
+//                             cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), and(shr(128, bX4), UINT64_MAX)))
 //                             cX4 := add(cX4, mul(shr(192, aX4), shr(192, bX4)))
 //                         }
 
@@ -1038,20 +1055,20 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 //                     }
 
 //                     // Parse the last remaining word.
-//                     if (ptrAikRest != 0) {
+//                     if (ptrARest != 0) {
 //                         assembly {
 //                             // Mask applies to leftover bits in word.
-//                             let mask := not(shr(mul(ptrAikRest, 8), not(0)))
+//                             let mask := not(shr(mul(ptrARest, 8), not(0)))
 //                             let aX4 := and(mload(ptrAik), mask) // Load packed values from `A` at `ptrA`.
 //                             let bX4 := and(mload(ptrBjk), mask) // Load packed values from `B` at `ptrB`.
 
-//                             cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MASK), and(shr(64, bX4), UINT64_MASK)))
-//                             cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MASK), and(shr(128, bX4), UINT64_MASK)))
+//                             cX4 := add(cX4, mul(and(shr(64, aX4), UINT64_MAX), and(shr(64, bX4), UINT64_MAX)))
+//                             cX4 := add(cX4, mul(and(shr(128, aX4), UINT64_MAX), and(shr(128, bX4), UINT64_MAX)))
 //                             cX4 := add(cX4, mul(shr(192, aX4), shr(192, bX4)))
 //                         }
 //                     }
 
-//                     ptrBj = ptrBj + ptrBRowSize; // Advance to the next row ↓ of `B`.
+//                     ptrBRow = ptrBRow + rowSizeB; // Advance to the next row ↓ of `B`.
 
 //                     if (l == 3) break;
 
@@ -1061,7 +1078,7 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 
 //                 assembly {
 //                     // // Preserve the previous data in memory.
-//                     // let word := and(mload(ptrCij), not(UINT64_MASK))
+//                     // let word := and(mload(ptrCij), not(UINT64_MAX))
 
 //                     mstore(ptrCij, cX4) // Store the result in C[i,j].
 //                 }
@@ -1069,7 +1086,7 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
 //                 ptrCij = ptrCij + 32; // Advance to the next element of `C` in strides of 4.
 //             }
 
-//             ptrAi = ptrAi + ptrARowSize; // Advance to the next row ↓ of `A`.
+//             ptrARow = ptrARow + rowSizeA; // Advance to the next row ↓ of `A`.
 //         }
 //     }
 // }
@@ -1114,8 +1131,8 @@ function eqAll(M32x32 A, M32x32 B) pure returns (bool equals) {
 
         // Parse the last remaining word in chunks of 8 bytes.
         while (rest != 0) {
-            uint256 a = (wordA >> ((32 - rest) * 8)) & UINT64_MASK;
-            uint256 b = (wordB >> ((32 - rest) * 8)) & UINT64_MASK;
+            uint256 a = (wordA >> ((32 - rest) * 8)) & UINT64_MAX;
+            uint256 b = (wordB >> ((32 - rest) * 8)) & UINT64_MAX;
 
             equals = equals && (a == b);
             rest = rest - 8;
@@ -1125,7 +1142,7 @@ function eqAll(M32x32 A, M32x32 B) pure returns (bool equals) {
 
 /* ------------- Mat x scalar operators ------------- */
 
-function addScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
+function addScalarUnchecked(M32x32 A, N32x32 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
@@ -1135,7 +1152,7 @@ function addScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
     addScalarUncheckedTo_(A, s, C);
 }
 
-function addScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
+function addScalar(M32x32 A, N32x32 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
@@ -1145,7 +1162,7 @@ function addScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
     addScalarTo_(A, s, C);
 }
 
-function addScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
+function addScalarUncheckedTo_(M32x32 A, N32x32 s, M32x32 C) pure {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
@@ -1156,7 +1173,7 @@ function addScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
         // The rest needs to be parsed individually.
         uint256 rest = size & 31;
         // Pack `s` in one word for efficiency.
-        uint256 valueX4 = packWordUnsafe(s, s, s, s);
+        uint256 sX4 = packWordUnsafe(s, s, s, s);
         // Obtain a pointer to `C`s data location.
         uint256 ptrC = ref(C);
 
@@ -1164,62 +1181,11 @@ function addScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
         while (ptrA != endA) {
             assembly {
                 let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
-                let c := add(a, valueX4) // Add packed values together.
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(sX4, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(sX4, not(MASK_2X4))), not(MASK_2X4)))
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
-            }
-
-            // Advance pointers to the next slot.
-            ptrA = ptrA + 32;
-            ptrC = ptrC + 32;
-        }
-
-        // Parse the last remaining word.
-        if (rest != 0) {
-            assembly {
-                // Mask applies to leftover bits in word.
-                let mask := not(shr(mul(rest, 8), not(0)))
-                // Load packed values from `A` at `ptrA`.
-                let a := mload(ptrA)
-                // Apply mask to clear out any unwanted right-aligned bits.
-                let c := add(and(a, mask), and(valueX4, mask)) // Add packed values together.
-
-                mstore(ptrC, c) // Store packed `c` in `ptrC`.
-            }
-        }
-    }
-}
-
-function addScalarTo_(M32x32 A, uint256 s, M32x32 C) pure {
-    unchecked {
-        (uint256 n, uint256 m, uint256 ptrA) = header(A);
-
-        // Loop over all `n * m` elements of 8 bytes.
-        uint256 size = n * m * 8;
-        // Up until here we can load & parse full words (4 elements).
-        uint256 endA = ptrA + (size & ~uint256(31));
-        // The rest needs to be parsed individually.
-        uint256 rest = size & 31;
-        // Pack `s` in one word for efficiency.
-        uint256 valueX4 = packWordUnsafe(s, s, s, s);
-        // Obtain a pointer to `C`s data location.
-        uint256 ptrC = ref(C);
-
-        // Keep track of over/underflows.
-        uint256 overflow;
-
-        // Loop over 32 byte words.
-        while (ptrA != endA) {
-            assembly {
-                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
-                let c := add(a, valueX4) // Add packed values together.
-
-                mstore(ptrC, c) // Store packed `c` in `ptrC`.
-
-                overflow := or(overflow, add(add(and(a, UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(add(and(shr(64, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(add(and(shr(128, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(add(shr(192, a), s), OVERFLOW_CHECK_INT64))
             }
 
             // Advance pointers to the next slot.
@@ -1234,22 +1200,99 @@ function addScalarTo_(M32x32 A, uint256 s, M32x32 C) pure {
                 let mask := not(shr(mul(rest, 8), not(0)))
                 // Load packed values from `A` at `ptrA`.
                 let a := and(mload(ptrA), mask)
-                // Apply mask to clear out any unwanted right-aligned bits.
-                let c := add(a, and(valueX4, mask)) // Add packed values together.
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(sX4, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(sX4, not(MASK_2X4))), not(MASK_2X4)))
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
-
-                overflow := or(overflow, add(add(and(shr(64, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(add(and(shr(128, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(add(shr(192, a), s), OVERFLOW_CHECK_INT64))
             }
         }
-
-        if (overflow > UINT64_MASK) revert __N32x32.N32x32_Overflow();
     }
 }
 
-function mulScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
+function addScalarTo_(M32x32 A, N32x32 s, M32x32 C) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
+
+        // Loop over all `n * m` elements of 8 bytes.
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words (4 elements).
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = size & 31;
+        // Pack `s` in one word for efficiency.
+        uint256 sX4 = packWordUnsafe(s, s, s, s);
+        // Obtain a pointer to `C`s data location.
+        uint256 ptrC = ref(C);
+
+        // Keep track of over/underflows.
+        uint256 overflow;
+
+        // Loop over 32 byte words.
+        while (ptrA != endA) {
+            assembly {
+                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(sX4, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(sX4, not(MASK_2X4))), not(MASK_2X4)))
+
+                // Overflow when signs of `a` and `s` are equal, but differ from `c`.
+                overflow := or(overflow, and(and(not(xor(a, sX4)), xor(a, c)), INT64_MIN_X4))
+
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+            }
+
+            // Advance pointers to the next slot.
+            ptrA = ptrA + 32;
+            ptrC = ptrC + 32;
+        }
+
+        // Parse the last remaining word.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 8), not(0)))
+                // Load packed values from `A` at `ptrA` and mask.
+                let a := and(mload(ptrA), mask)
+                sX4 := and(sX4, mask)
+
+                // Add packed values together.
+                let c := and(add(and(a, MASK_2X4), and(sX4, MASK_2X4)), MASK_2X4)
+                c := or(c, and(add(and(a, not(MASK_2X4)), and(sX4, not(MASK_2X4))), not(MASK_2X4)))
+
+                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+
+                // Overflow when signs of `a` and `s` are equal, but differ from `c`.
+                overflow := or(overflow, and(and(not(xor(a, sX4)), xor(a, c)), INT64_MIN_X4))
+            }
+        }
+
+        if (overflow != 0) revert __N32x32.N32x32_Overflow();
+    }
+}
+
+function mulIntUnchecked(M32x32 A, int256 s) pure returns (M32x32 C) {
+    (uint256 n, uint256 m) = A.shape();
+
+    // Allocate new matrix of the same dimensions.
+    C = mallocM32x32(n, m);
+
+    // Multiply `A` with scalar `s`, store result in `C`.
+    mulScalarUncheckedTo_(A, N32x32.wrap(int64(s)), C);
+}
+
+function mulInt(M32x32 A, int256 s) pure returns (M32x32 C) {
+    (uint256 n, uint256 m) = A.shape();
+
+    // Allocate new matrix of the same dimensions.
+    C = mallocM32x32(n, m);
+
+    // Multiply `A` with scalar `s`, store result in `C`.
+    mulScalarTo_(A, __N32x32.N32x32FromInt(s), C);
+}
+
+function mulScalarUnchecked(M32x32 A, N32x32 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
@@ -1259,7 +1302,7 @@ function mulScalarUnchecked(M32x32 A, uint256 s) pure returns (M32x32 C) {
     mulScalarUncheckedTo_(A, s, C);
 }
 
-function mulScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
+function mulScalar(M32x32 A, N32x32 s) pure returns (M32x32 C) {
     (uint256 n, uint256 m) = A.shape();
 
     // Allocate new matrix of the same dimensions.
@@ -1269,7 +1312,7 @@ function mulScalar(M32x32 A, uint256 s) pure returns (M32x32 C) {
     mulScalarTo_(A, s, C);
 }
 
-function mulScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
+function mulScalarUncheckedTo_(M32x32 A, N32x32 s, M32x32 C) pure {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
 
@@ -1286,9 +1329,21 @@ function mulScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
         while (ptrA != endA) {
             assembly {
                 let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
-                let c := mul(a, s) // Multiply packed values together.
 
-                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+                // Multiply packed values together.
+                let c := sar(32, mul(signextend(7, a), s))
+                let cX4 := and(c, UINT64_MAX)
+
+                c := sar(32, mul(signextend(7, shr(64, a)), s))
+                cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(signextend(7, shr(128, a)), s))
+                cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(sar(192, a), s))
+                cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+                mstore(ptrC, cX4) // Store packed `c` in `ptrC`.
             }
 
             // Advance pointers to the next slot.
@@ -1296,76 +1351,108 @@ function mulScalarUncheckedTo_(M32x32 A, uint256 s, M32x32 C) pure {
             ptrC = ptrC + 32;
         }
 
-        // Parse the last remaining word in chunks of 8 bytes.
-        if (rest != 0) {
-            assembly {
-                // Mask applies to leftover bits in word.
-                let mask := not(shr(mul(rest, 8), not(0)))
-                // Load packed values from `A` at `ptrA`.
-                let a := mload(ptrA)
-                // Apply mask to clear out any unwanted right-aligned bits.
-                let c := mul(and(a, mask), s) // Multiply packed values together.
-
-                mstore(ptrC, c) // Store packed `c` in `ptrC`.
-            }
-        }
-    }
-}
-
-function mulScalarTo_(M32x32 A, uint256 s, M32x32 C) pure {
-    unchecked {
-        (uint256 n, uint256 m, uint256 ptrA) = header(A);
-
-        // Loop over all `n * m` elements of 8 bytes.
-        uint256 size = n * m * 8;
-        // Up until here we can load & parse full words (4 elements).
-        uint256 endA = ptrA + (size & ~uint256(31));
-        // The rest needs to be parsed individually.
-        uint256 rest = size & 31;
-        // Obtain a pointer to `C`s data location.
-        uint256 ptrC = ref(C);
-        // Keep track of over/underflows.
-        uint256 overflow;
-
-        // Loop over 32 byte words.
-        while (ptrA != endA) {
-            assembly {
-                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
-                let c := mul(a, s) // Multiply packed values together.
-
-                mstore(ptrC, c) // Store packed `c` in `ptrC`.
-
-                // Check for over/underflows.
-                overflow := or(overflow, add(mul(and(a, UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(mul(and(shr(64, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(mul(and(shr(128, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(mul(shr(192, a), s), OVERFLOW_CHECK_INT64))
-            }
-
-            // Advance pointers to the next slot.
-            ptrA = ptrA + 32;
-            ptrC = ptrC + 32;
-        }
-
-        // Parse the last remaining word in chunks of 8 bytes.
+        // Parse the last remaining word.
         if (rest != 0) {
             assembly {
                 // Mask applies to leftover bits in word.
                 let mask := not(shr(mul(rest, 8), not(0)))
                 // Load packed values from `A` at `ptrA`.
                 let a := and(mload(ptrA), mask)
-                // Apply mask to clear out any unwanted right-aligned bits.
-                let c := mul(and(a, mask), s) // Multiply packed values together.
 
-                mstore(ptrC, c) // Store packed `c` in `ptrC`.
+                // Multiply packed `a` with `s` and keep track of carry.
+                let c := sar(32, mul(signextend(7, a), s))
+                let cX4 := and(c, UINT64_MAX)
 
-                overflow := or(overflow, add(mul(and(shr(64, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(mul(and(shr(128, a), UINT64_MASK), s), OVERFLOW_CHECK_INT64))
-                overflow := or(overflow, add(mul(shr(192, a), s), OVERFLOW_CHECK_INT64))
+                c := sar(32, mul(signextend(7, shr(64, a)), s))
+                cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(signextend(7, shr(128, a)), s))
+                cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(sar(192, a), s))
+                cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+                mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
+            }
+        }
+    }
+}
+
+function mulScalarTo_(M32x32 A, N32x32 s, M32x32 C) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
+
+        // Loop over all `n * m` elements of 8 bytes.
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words (4 elements).
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = size & 31;
+        // Obtain a pointer to `C`s data location.
+        uint256 ptrC = ref(C);
+        // Keep track of carry bits.
+        uint256 carry;
+
+        // Loop over 32 byte words.
+        while (ptrA != endA) {
+            assembly {
+                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+
+                // Multiply packed `a` with `s` and keep track of carry.
+                let c := sar(32, mul(signextend(7, a), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                let cX4 := and(c, UINT64_MAX)
+
+                c := sar(32, mul(signextend(7, shr(64, a)), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(signextend(7, shr(128, a)), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(sar(192, a), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+                mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
+            }
+
+            // Advance pointers to the next slot.
+            ptrA = ptrA + 32;
+            ptrC = ptrC + 32;
+        }
+
+        // Parse the last remaining word.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 8), not(0)))
+                // Load packed values from `A` at `ptrA`.
+                let a := and(mload(ptrA), mask)
+
+                // Multiply packed `a` with `s` and keep track of carry.
+                let c := sar(32, mul(signextend(7, a), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                let cX4 := and(c, UINT64_MAX)
+
+                c := sar(32, mul(signextend(7, shr(64, a)), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(signextend(7, shr(128, a)), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+                c := sar(32, mul(sar(192, a), s))
+                carry := or(carry, add(c, INT64_SIGN))
+                cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+                mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
             }
         }
 
-        if (overflow > UINT64_MASK) revert __N32x32.N32x32_Overflow();
+        if (carry > UINT64_MAX) revert __N32x32.N32x32_Overflow();
     }
 }
 
@@ -1414,7 +1501,6 @@ function min(M32x32 A) pure returns (N32x32 minValue) {
             }
 
             // Parse the last remaining word in chunks of 8 bytes.
-            // XXX: try do-while.
             while (true) {
                 assembly {
                     let a := signextend(7, sar(mul(sub(32, rest), 8), aX4))
@@ -1474,7 +1560,7 @@ function max(M32x32 A) pure returns (N32x32 maxValue) {
             // Parse the last remaining word in chunks of 8 bytes.
             while (true) {
                 assembly {
-                    // a = (aX4 >> ((32 - rest) * 8)) & UINT64_MASK;
+                    // a = (aX4 >> ((32 - rest) * 8)) & UINT64_MAX;
                     let a := signextend(7, sar(mul(sub(32, rest), 8), aX4))
                     if sgt(a, maxValue) { maxValue := a } // Check whether `a > maxValue`.
                 }
@@ -1887,6 +1973,96 @@ function fill_(M32x32 A, N32x32 s) pure {
     }
 }
 
+/// @dev TODO optimize
+function neg(M32x32 A) pure returns (M32x32 C) {
+    C = mulScalar(A, NEG_ONE);
+}
+
+function abs(M32x32 A) pure returns (M32x32 C) {
+    unchecked {
+        C = mulScalar(A, NEG_ONE);
+
+        (uint256 n, uint256 m, uint256 ptrA) = header(A);
+
+        // Loop over all `n * m` elements of 8 bytes.
+        uint256 size = n * m * 8;
+        // Up until here we can load & parse full words (4 elements).
+        uint256 endA = ptrA + (size & ~uint256(31));
+        // The rest needs to be parsed individually.
+        uint256 rest = size & 31;
+        // Obtain a pointer to `C`s data location.
+        uint256 ptrC = ref(C);
+        // Keep track of carry bits.
+        bool overflow;
+
+        // Loop over 32 byte words.
+        while (ptrA != endA) {
+            assembly {
+                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+
+                if and(a, INT64_SIGN) {
+                    a := and(a, not(UINT64_MAX))
+                    a := or(a, and(add(not(a), 1), UINT64_MAX))
+                }
+
+                // if and(a, INT64_SIGN) {
+                //     a := and(a, not(UINT64_MAX))
+                //     a := or(a, and(add(not(a), 1), UINT64_MAX))
+                // }
+
+                // c := sar(32, mul(signextend(7, shr(64, a)), s))
+                // carry := or(carry, add(c, INT64_SIGN))
+                // cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+                // c := sar(32, mul(signextend(7, shr(128, a)), s))
+                // carry := or(carry, add(c, INT64_SIGN))
+                // cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+                // c := sar(32, mul(sar(192, a), s))
+                // carry := or(carry, add(c, INT64_SIGN))
+                // cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+                mstore(ptrC, a) // Store packed `cX4` in `ptrC`.
+            }
+
+            // Advance pointers to the next slot.
+            ptrA = ptrA + 32;
+            ptrC = ptrC + 32;
+        }
+
+        // // Parse the last remaining word.
+        // if (rest != 0) {
+        //     assembly {
+        //         // Mask applies to leftover bits in word.
+        //         let mask := not(shr(mul(rest, 8), not(0)))
+        //         // Load packed values from `A` at `ptrA`.
+        //         let a := and(mload(ptrA), mask)
+
+        //         // Multiply packed `a` with `s` and keep track of carry.
+        //         let c := sar(32, mul(signextend(7, a), s))
+        //         carry := or(carry, add(c, INT64_SIGN))
+        //         let cX4 := and(c, UINT64_MAX)
+
+        //         c := sar(32, mul(signextend(7, shr(64, a)), s))
+        //         carry := or(carry, add(c, INT64_SIGN))
+        //         cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+        //         c := sar(32, mul(signextend(7, shr(128, a)), s))
+        //         carry := or(carry, add(c, INT64_SIGN))
+        //         cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+        //         c := sar(32, mul(sar(192, a), s))
+        //         carry := or(carry, add(c, INT64_SIGN))
+        //         cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+        //         mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
+        //     }
+        // }
+
+        // if (carry > UINT64_MAX) revert __N32x32.N32x32_Overflow();
+    }
+}
+
 function T(M32x32 A) pure returns (M32x32 C) {
     C = transpose(A);
 }
@@ -1902,33 +2078,33 @@ function transposeNaive(M32x32 A) pure returns (M32x32 C) {
         uint256 ptrCi = ref(C) - 24;
         ptrAj = ptrAj - 24;
 
-        uint256 ptrARowSize = 8 * m;
-        uint256 ptrCRowSize = 8 * n;
+        uint256 rowSizeA = 8 * m;
+        uint256 rowSizeC = 8 * n;
         // End iterating over `A`s columns when arriving at the last column.
-        uint256 ptrAjEnd = ptrAj + ptrARowSize;
+        uint256 ptrAjEnd = ptrAj + rowSizeA;
 
         // Loop over `A`s rows →.
         while (ptrAj != ptrAjEnd) {
             uint256 ptrA = ptrAj; // Start at the beginning of the current column.
             uint256 ptrC = ptrCi; // Start at the beginning of the current row.
-            uint256 ptrCEnd = ptrCi + ptrCRowSize; // End at the last element of the current row.
+            uint256 ptrCEnd = ptrCi + rowSizeC; // End at the last element of the current row.
 
             // Loop over `C`s columns ↓.
             while (ptrC != ptrCEnd) {
                 assembly {
-                    let preserveWord := and(mload(ptrC), not(UINT64_MASK))
-                    let a := and(mload(ptrA), UINT64_MASK)
+                    let preserveWord := and(mload(ptrC), not(UINT64_MAX))
+                    let a := and(mload(ptrA), UINT64_MAX)
                     let c := or(preserveWord, a)
 
                     mstore(ptrC, c) // Copy element from `A` to `C`.
                 }
 
                 ptrC = ptrC + 8; // Advance to the next column →.
-                ptrA = ptrA + ptrARowSize; // Advance to the next row ↓.
+                ptrA = ptrA + rowSizeA; // Advance to the next row ↓.
             }
 
             ptrAj = ptrAj + 8; // Advance to the next column → of `A`.
-            ptrCi = ptrCi + ptrCRowSize; // Advance to the next row ↓ of `C`.
+            ptrCi = ptrCi + rowSizeC; // Advance to the next row ↓ of `C`.
         }
     }
 }
@@ -1943,11 +2119,11 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
 
         uint256 ptrCRow = ref(C);
 
-        uint256 ptrARowSize = 8 * m;
-        uint256 ptrAColSize = 8 * n;
+        uint256 rowSizeA = 8 * m;
+        uint256 colSizeA = 8 * n;
         uint256 ptrAColEnd;
 
-        if (ptrAColSize & 31 != 0) {
+        if (colSizeA & 31 != 0) {
             // Handle partial blocks of `A` containing less than 4 rows.
             // Note: This step adds dirty values to `C` when not preserving the existing memory.
             //       However, as this is done before the main block loop,
@@ -1964,11 +2140,11 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
             // ┗━━━━━━━━━━━━━━━━━━━━━━━━┹╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
             //
             // Place `ptrA` at the beginning of the first row of `A` that is not a multiple of 4.
-            ptrACol = ref(A) + (ptrAColSize & ~uint256(31)) * m;
+            ptrACol = ref(A) + (colSizeA & ~uint256(31)) * m;
             // Place `ptrC` at the corresponding location in `C`.
-            ptrCRow = ref(C) + (ptrAColSize & ~uint256(31));
+            ptrCRow = ref(C) + (colSizeA & ~uint256(31));
             // End at last full multiple of 4.
-            ptrAColEnd = ptrACol + (ptrARowSize & ~uint256(31));
+            ptrAColEnd = ptrACol + (rowSizeA & ~uint256(31));
 
             // Loop over `A`s columns → (`C`s rows ↓) in strides of 4.
             while (ptrACol != ptrAColEnd) {
@@ -1981,13 +2157,13 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
                     // The last row is not used required, as otherwise the row count would have been divisible by 4.
                     // We might not require all 4 columns, however these will be overwritten later in the main loop.
                     let a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     let a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     let a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
 
                     // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
-                    let mask := shl(192, UINT64_MASK)
+                    let mask := shl(192, UINT64_MAX)
                     let c1X4 := and(a1X4, mask)
                     c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
                     c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
@@ -1995,31 +2171,31 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
                     mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
 
                     // Pack elements from `A[i:i+3,j+1]` into `C[j+1,i:i+3]`.
-                    mask := shl(128, UINT64_MASK)
+                    mask := shl(128, UINT64_MAX)
                     let c2X4 := shl(64, and(a1X4, mask))
                     c2X4 := or(c2X4, and(a2X4, mask))
                     c2X4 := or(c2X4, shr(64, and(a3X4, mask)))
 
-                    mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, colSizeA), c2X4) // Copy packed elements from `A` to `C`.
 
                     // Pack elements from `A[i:i+3,j+2]` into `C[j+2,i:i+3]`.
-                    mask := shl(64, UINT64_MASK)
+                    mask := shl(64, UINT64_MAX)
                     let c3X4 := shl(128, and(a1X4, mask))
                     c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
                     c3X4 := or(c3X4, and(a3X4, mask))
 
-                    mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, mul(colSizeA, 2)), c3X4) // Copy packed elements from `A` to `C`.
 
                     // Pack elements from `A[i:i+3,j+3]` into `C[j+3,i:i+3]`.
-                    let c4X4 := shl(192, and(a1X4, UINT64_MASK))
-                    c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
-                    c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
+                    let c4X4 := shl(192, and(a1X4, UINT64_MAX))
+                    c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MAX)))
+                    c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MAX)))
 
-                    mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, mul(colSizeA, 3)), c4X4) // Copy packed elements from `A` to `C`.
                 }
 
                 ptrACol = ptrACol + 32; // Advance column pointer to the next column → of `A` in strides of 4.
-                ptrCRow = ptrCRow + 4 * ptrAColSize; // Advance row pointer to the next row ↓ of `C` in strides of 4.
+                ptrCRow = ptrCRow + 4 * colSizeA; // Advance row pointer to the next row ↓ of `C` in strides of 4.
             }
         }
 
@@ -2038,29 +2214,29 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
         ptrACol = ref(A);
         ptrCRow = ref(C);
         // End iterating over `A`s columns ➞ when arriving at the last column multiple of 4.
-        ptrAColEnd = ptrACol + (ptrARowSize & ~uint256(31));
-        //
+        ptrAColEnd = ptrACol + (rowSizeA & ~uint256(31));
+
         // Outer loop over `A`s columns → (`C`s rows ↓) in strides of 4.
         while (ptrACol != ptrAColEnd) {
             uint256 ptrA = ptrACol; // Start at the beginning of the current column.
             uint256 ptrC = ptrCRow; // Start at the beginning of the current row.
-            uint256 ptrCEnd = ptrCRow + (ptrAColSize & ~uint256(31)); // End at the last element of the current row.
+            uint256 ptrCEnd = ptrCRow + (colSizeA & ~uint256(31)); // End at the last element of the current row.
 
             // Inner loop over `A`s rows ↓ (`C`s columns →) in strides of 4.
             while (ptrC != ptrCEnd) {
                 assembly {
                     // Load block of packed elements of the next 4 rows and columns of `A`: `A[i:i+4,j:j+4]`.
                     let a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     let a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     let a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     let a4X4 := mload(ptrA) // Load packed A[i+3,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
 
                     // Pack elements from `A[i:i+4,j]` into `C[j,i:i+4]`.
-                    let mask := shl(192, UINT64_MASK)
+                    let mask := shl(192, UINT64_MAX)
                     let c1X4 := and(a1X4, mask)
                     c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
                     c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
@@ -2069,30 +2245,30 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
                     mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
 
                     // Pack elements from `A[i:i+4,j+1]` into `C[j+1,i:i+4]`.
-                    mask := shl(128, UINT64_MASK)
+                    mask := shl(128, UINT64_MAX)
                     let c2X4 := shl(64, and(a1X4, mask))
                     c2X4 := or(c2X4, and(a2X4, mask))
                     c2X4 := or(c2X4, shr(64, and(a3X4, mask)))
                     c2X4 := or(c2X4, shr(128, and(a4X4, mask)))
 
-                    mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, colSizeA), c2X4) // Copy packed elements from `A` to `C`.
 
                     // Pack elements from `A[i:i+4,j+2]` into `C[j+2,i:i+4]`.
-                    mask := shl(64, UINT64_MASK)
+                    mask := shl(64, UINT64_MAX)
                     let c3X4 := shl(128, and(a1X4, mask))
                     c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
                     c3X4 := or(c3X4, shr(0, and(a3X4, mask)))
                     c3X4 := or(c3X4, shr(64, and(a4X4, mask)))
 
-                    mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, mul(colSizeA, 2)), c3X4) // Copy packed elements from `A` to `C`.
 
                     // Pack elements from `A[i:i+4,j+3]` into `C[j+3,i:i+4]`.
-                    let c4X4 := shl(192, and(a1X4, UINT64_MASK))
-                    c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
-                    c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
-                    c4X4 := or(c4X4, and(a4X4, UINT64_MASK))
+                    let c4X4 := shl(192, and(a1X4, UINT64_MAX))
+                    c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MAX)))
+                    c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MAX)))
+                    c4X4 := or(c4X4, and(a4X4, UINT64_MAX))
 
-                    mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
+                    mstore(add(ptrC, mul(colSizeA, 3)), c4X4) // Copy packed elements from `A` to `C`.
                 }
 
                 ptrC = ptrC + 32; // Advance to the next column → in strides of 4.
@@ -2100,10 +2276,10 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
 
             ptrACol = ptrACol + 32; // Advance column pointer to the next column → of `A` in strides of 4.
             // FIX
-            ptrCRow = ptrCRow + 4 * ptrAColSize; // Advance row pointer to the next row ↓ of `C` in strides of 4.
+            ptrCRow = ptrCRow + 4 * colSizeA; // Advance row pointer to the next row ↓ of `C` in strides of 4.
         }
 
-        if (ptrARowSize & 31 != 0) {
+        if (rowSizeA & 31 != 0) {
             uint256 ptrARow;
             uint256 ptrARowEnd;
             uint256 ptrCCol;
@@ -2114,25 +2290,25 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
             // ┆  8     9     10    11  ┃  12    13    14  ┃
             // ┆  15    16    17    18  ┃  19    20    21  ┃
             // ┆  22    23    24    25  ┃  26    27    28  ┃
-            // ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╄━━━━━━━━━━━━━━━━━━┩
-            // ╎  29    30    31    32  ╎  33    34    35  ┆
-            // ╎  36    37    38    39  ╎  40    41    42  ┆
-            // ╎  43    44    45    46  ╎  47    48    49  ┆
-            // └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┴╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
+            // ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╊━━━━━━━━━━━━━━━━━━┫
+            // ╎  29    30    31    32  ┃  33    34    35  ┃
+            // ╎  36    37    38    39  ┃  40    41    42  ┃
+            // ╎  43    44    45    46  ┃  47    48    49  ┃
+            // └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┺━━━━━━━━━━━━━━━━━━┛
             //
             // Place `ptrA` at the beginning of the first column of `A` that is not a multiple of 4.
-            ptrARow = ref(A) + (ptrARowSize & ~uint256(31));
+            ptrARow = ref(A) + (rowSizeA & ~uint256(31));
             // Place `ptrC` at the corresponding location in `C`.
-            ptrCCol = ref(C) + (ptrARowSize & ~uint256(31)) * m;
+            ptrCCol = ref(C) + (rowSizeA & ~uint256(31)) * n;
             // End at last full multiple of 4.
-            ptrARowEnd = ptrARow + (ptrAColSize & ~uint256(31)) * m;
+            ptrARowEnd = ptrARow + (colSizeA & ~uint256(31)) * m;
 
-            // // Reverse order.
-            // (ptrARow, ptrARowEnd) = (ptrARowEnd, ptrARow);
-            // ptrCCol = ptrCCol + (ptrAColSize & ~uint256(31));
+            // Reverse order, so that we don't need to mask words.
+            (ptrARow, ptrARowEnd) = (ptrARowEnd, ptrARow);
+            ptrCCol = ptrCCol + (colSizeA & ~uint256(31));
 
-            // Loop over `A`s rows ↓ (`C`s columns →) in strides of 4.
-            while (ptrARow != ptrARowEnd) {
+            // Loop over `A`s rows ↓ (`C`s columns →) in strides of 4 (in reverse order).
+            while (true) {
                 // NOTE: move out.
                 uint256 ptrA = ptrARow; // Start at the beginning of the current column.
                 uint256 ptrC = ptrCCol; // Start at the beginning of the current row.
@@ -2145,15 +2321,15 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
                 assembly {
                     // Load block of packed elements of the next 3 rows and 4 columns of `A`: `A[i:i+3,j:j+4]`.
                     a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
-                    ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
+                    ptrA := add(ptrA, rowSizeA) // Advance to the next row ↓ of `A`.
                     a4X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
 
                     // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
-                    let mask := shl(192, UINT64_MASK)
+                    let mask := shl(192, UINT64_MAX)
                     let c1X4 := and(a1X4, mask)
                     c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
                     c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
@@ -2162,92 +2338,39 @@ function transpose(M32x32 A) pure returns (M32x32 C) {
                     mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
                 }
 
-                if (ptrARowSize & 31 > 15) {
+                if (rowSizeA & 31 > 15) {
                     assembly {
                         // Pack elements from `A[i:i+3,j+1]` into `C[j+1,i:i+3]`.
-                        let mask := shl(128, UINT64_MASK)
+                        let mask := shl(128, UINT64_MAX)
                         let c2X4 := shl(64, and(a1X4, mask))
                         c2X4 := or(c2X4, and(a2X4, mask))
                         c2X4 := or(c2X4, shr(64, and(a3X4, mask)))
                         c2X4 := or(c2X4, shr(128, and(a4X4, mask)))
 
-                        mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
+                        mstore(add(ptrC, colSizeA), c2X4) // Copy packed elements from `A` to `C`.
                     }
 
-                    if (ptrARowSize & 31 == 24) {
+                    if (rowSizeA & 31 == 24) {
                         assembly {
                             // Pack elements from `A[i:i+3,j+2]` into `C[j+2,i:i+3]`.
-                            let mask := shl(64, UINT64_MASK)
+                            let mask := shl(64, UINT64_MAX)
                             let c3X4 := shl(128, and(a1X4, mask))
                             c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
                             c3X4 := or(c3X4, and(a3X4, mask))
                             c3X4 := or(c3X4, shr(64, and(a4X4, mask)))
 
-                            mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
+                            mstore(add(ptrC, mul(colSizeA, 2)), c3X4) // Copy packed elements from `A` to `C`.
                         }
                     }
                 }
 
-                ptrARow = ptrARow + 4 * ptrARowSize; // Advance row pointer to the next row ↓ of `A` in strides of 4.
-                ptrCCol = ptrCCol + 32; // Advance column pointer to the next column → of `C` in strides of 4.
+                if (ptrARow == ptrARowEnd) break;
+
+                // Note: Traversing in reverse order to avoid masking.
+                ptrARow = ptrARow - 4 * rowSizeA; // Advance row pointer to the next row ↓ of `A` in strides of 4.
+                ptrCCol = ptrCCol - 32; // Advance column pointer to the next column → of `C` in strides of 4.
             }
         }
-
-        // ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
-        // ╎  1     2     3     4   ╎  5     6     7   ┆
-        // ╎  8     9     10    11  ╎  12    13    14  ┆
-        // ╎  15    16    17    18  ╎  19    20    21  ┆
-        // ╎  22    23    24    25  ╎  26    27    28  ┆
-        // ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╆━━━━━━━━━━━━━━━━━━┪
-        // ╎  29    30    31    32  ┃  33    34    35  ┃
-        // ╎  36    37    38    39  ┃  40    41    42  ┃
-        // ╎  43    44    45    46  ┃  47    48    49  ┃
-        // └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┺━━━━━━━━━━━━━━━━━━┛
-
-        // Handle the last row of `A` if it is not a multiple of 4.
-        // if (ptrARowSize & 31 != 0) {
-        //     uint256 ptrA = ptrACol; // Start at the beginning of the current column.
-        //     uint256 ptrC = ptrCRow; // Start at the beginning of the current row.
-
-        //     assembly {
-        //         let a1X4 := mload(ptrA) // Load packed A[i+0,j:j+4].
-        //         ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
-        //         let a2X4 := mload(ptrA) // Load packed A[i+1,j:j+4].
-        //         ptrA := add(ptrA, ptrARowSize) // Advance to the next row ↓ of `A`.
-        //         let a3X4 := mload(ptrA) // Load packed A[i+2,j:j+4].
-
-        //         // Pack elements from `A[i:i+3,j]` into `C[j,i:i+3]`.
-        //         let mask := shl(192, UINT64_MASK)
-        //         let c1X4 := and(a1X4, mask)
-        //         c1X4 := or(c1X4, shr(64, and(a2X4, mask)))
-        //         c1X4 := or(c1X4, shr(128, and(a3X4, mask)))
-
-        //         mstore(ptrC, c1X4) // Copy packed elements from `A` to `C`.
-
-        //         // Pack elements from `A[i:i+4,j+1]` into `C[j+1,i:i+4]`.
-        //         mask := shl(128, UINT64_MASK)
-        //         let c2X4 := shl(64, and(a1X4, shl(128, UINT64_MASK)))
-        //         c2X4 := or(c2X4, and(a2X4, shl(128, UINT64_MASK)))
-        //         c2X4 := or(c2X4, shr(64, and(a3X4, shl(128, UINT64_MASK))))
-
-        //         mstore(add(ptrC, ptrAColSize), c2X4) // Copy packed elements from `A` to `C`.
-
-        //         // Pack elements from `A[i:i+4,j+2]` into `C[j+2,i:i+4]`.
-        //         mask := shl(64, UINT64_MASK)
-        //         let c3X4 := shl(128, and(a1X4, mask))
-        //         c3X4 := or(c3X4, shl(64, and(a2X4, mask)))
-        //         c3X4 := or(c3X4, shr(0, and(a3X4, mask)))
-
-        //         mstore(add(ptrC, mul(ptrAColSize, 2)), c3X4) // Copy packed elements from `A` to `C`.
-
-        //         // Pack elements from `A[i:i+4,j+3]` into `C[j+3,i:i+4]`.
-        //         let c4X4 := shl(192, and(a1X4, UINT64_MASK))
-        //         c4X4 := or(c4X4, shl(128, and(a2X4, UINT64_MASK)))
-        //         c4X4 := or(c4X4, shl(64, and(a3X4, UINT64_MASK)))
-
-        //         mstore(add(ptrC, mul(ptrAColSize, 3)), c4X4) // Copy packed elements from `A` to `C`.
-        //     }
-        // }
     }
 }
 
@@ -2293,53 +2416,418 @@ function copy(M32x32 A) view returns (M32x32 C) {
     }
 }
 
-function fromAbiEncoded(bytes memory dataBytes) pure returns (M32x32 C) {
+// function fromEncodedPacked_(bytes memory dataBytes) pure returns (M32x32 C) {
+//     C = fromEncodedPacked_(dataBytes, 1, dataBytes.length / 8);
+// }
+
+// function fromEncoded(bytes memory dataBytes, uint256 n, uint256 m) pure returns (M32x32 C) {
+//     unchecked {
+//         if (n * m * 32 > dataBytes.length) revert M32x32_TooLarge();
+
+//         uint256 dataPtr;
+
+//         assembly {
+//             dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
+//         }
+
+//         C = mallocM32x32(n, m);
+//         // C = M32x32Header(dataPtr, n, m); // Generate header without allocating memory.
+//     }
+// }
+
+// function bytes_(M32x32 A) pure returns (bytes memory dataBytes) {
+//     uint256 ptr = ref(A);
+
+//     assembly {
+//         // This only works under the assumption that
+//         // we always store the size in bytes before the data.
+//         dataBytes := sub(ptr, 32)
+//     }
+// }
+// fromUint256Ptr
+
+function fromUintArray(uint256[][] memory data) pure returns (M32x32 C) {
     unchecked {
-        uint256 m = dataBytes.length / 4;
+        uint256 n = data.length;
 
-        uint256 dataPtr;
+        if (n == 0) return C = mallocM32x32(0, 0);
 
+        uint256 m = data[0].length;
+
+        uint256 rowPtr;
         assembly {
-            dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
+            rowPtr := add(data, 0x20)
         }
 
-        C = M32x32Header(dataPtr, 1, m); // Generate header without allocating memory.
+        C = mallocM32x32(n, m); // Allocate new matrix of the same dimensions.
 
-        fromUint256PtrTo_(dataPtr, C); // Copy words from `ptr` to packed `C`.
+        uint256 ptrC = ref(C); // Obtain a reference to `C`s data.
+
+        uint256 carry; // Keep track of overflow.
+        uint256 rowSize = m * 32;
+        uint256 rowPtrEnd = rowPtr + n * 32; // Stop after parsing `n` rows.
+
+        while (rowPtr != rowPtrEnd) {
+            uint256 ptr;
+            uint256 rowLen;
+
+            assembly {
+                ptr := mload(rowPtr) // Load row data location.
+                rowLen := mload(ptr) // Load length of row data.
+                ptr := add(ptr, 0x20) // Data starts after 32 bytes.
+            }
+
+            if (rowLen != m) revert M32x32_InvalidDimensions();
+
+            uint256 end = ptr + (rowSize & ~uint256(127)); // Up until here we can load & parse full words (4 elements).
+            uint256 rest = rowSize & 127; // The rest needs to be parsed individually.
+
+            while (ptr != end) {
+                assembly {
+                    let a1, a2, a3, a4, cX4
+
+                    // Load 4 values from `A` at `ptr`.
+                    a1 := mload(ptr)
+                    a2 := mload(add(0x20, ptr))
+                    a3 := mload(add(0x40, ptr))
+                    a4 := mload(add(0x60, ptr))
+
+                    // Pack values into `cX4`.
+                    cX4 := shl(224, a1)
+                    cX4 := or(cX4, shl(160, a2))
+                    cX4 := or(cX4, shl(96, a3))
+                    cX4 := or(cX4, shl(32, a4))
+
+                    mstore(ptrC, cX4) // Store packed values in `ptrC`.
+
+                    // Keep track of overflow.
+                    carry := or(carry, a1)
+                    carry := or(carry, a2)
+                    carry := or(carry, a3)
+                    carry := or(carry, a4)
+                }
+
+                // Advance pointers to the next slots.
+                ptr = ptr + 0x80;
+                ptrC = ptrC + 0x20;
+            }
+
+            // Parse the last remaining chunk.
+            if (rest != 0) {
+                assembly {
+                    // Mask applies to leftover bits in word.
+                    let mask := not(shr(mul(rest, 2), not(0)))
+                    let a1, a2, a3, cX4
+
+                    // Load 3 values from `A` at `ptr`.
+                    a1 := mload(ptr)
+                    a2 := mload(add(0x20, ptr))
+                    a3 := mload(add(0x40, ptr))
+
+                    // Pack values into `cX4`.
+                    cX4 := shl(224, a1)
+                    cX4 := or(cX4, shl(160, and(a2, UINT32_MAX)))
+                    cX4 := or(cX4, shl(96, and(a3, UINT32_MAX)))
+
+                    mstore(ptrC, and(cX4, mask)) // Store packed `c` in `ptrC`.
+
+                    // Keep track of overflow.
+                    carry := or(carry, a1)
+                    carry := or(carry, mul(a2, gt(rest, 0x20)))
+                    carry := or(carry, mul(a3, gt(rest, 0x40)))
+
+                    ptrC := add(ptrC, shr(2, rest))
+                }
+            }
+
+            rowPtr = rowPtr + 0x20;
+        }
+
+        if (carry > uint256(INT32_MAX)) revert __N32x32.N32x32_Overflow();
     }
 }
 
-function fromAbiEncodedPacked_(bytes memory dataBytes) pure returns (M32x32 C) {
-    C = fromAbiEncodedPacked_(dataBytes, 1, dataBytes.length / 8);
-}
-
-function fromAbiEncodedPacked_(bytes memory dataBytes, uint256 n, uint256 m) pure returns (M32x32 C) {
+function fromUintEncoded(bytes memory dataBytes) pure returns (M32x32 C) {
     unchecked {
-        if (n * m * 32 > dataBytes.length) revert M32x32_TooLarge();
+        uint256 m = dataBytes.length / 32;
 
-        uint256 dataPtr;
+        uint256 ptr;
 
         assembly {
-            dataPtr := add(32, dataBytes) // Actual data is located after length encoding.
+            ptr := add(32, dataBytes) // Actual data is located after length encoding.
         }
 
-        C = M32x32Header(dataPtr, n, m); // Generate header without allocating memory.
+        C = mallocM32x32(1, m);
+
+        fromUintPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
     }
 }
 
-function bytes_(M32x32 A) pure returns (bytes memory dataBytes) {
-    uint256 ptr = ref(A);
+function fromUintPtrTo_(uint256 ptr, M32x32 C) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptrC) = header(C);
+        // Loop over all `n * m` elements of 32 bytes.
+        uint256 size = n * m * 32;
+        // Up until here we can load & parse full words (4 elements).
+        uint256 end = ptr + (size & ~uint256(127));
+        // The rest needs to be parsed individually.
+        uint256 rest = size & 127;
+        // Keep track of overflow.
+        uint256 carry;
 
-    assembly {
-        // This only works under the assumption that
-        // we always store the size in bytes before the data.
-        dataBytes := sub(ptr, 32)
+        while (ptr != end) {
+            assembly {
+                let a1, a2, a3, a4, cX4
+
+                // Load 4 values from `A` at `ptr`.
+                a1 := mload(ptr)
+                a2 := mload(add(0x20, ptr))
+                a3 := mload(add(0x40, ptr))
+                a4 := mload(add(0x60, ptr))
+
+                // Pack values into `cX4`.
+                cX4 := shl(224, a1)
+                cX4 := or(cX4, shl(160, a2))
+                cX4 := or(cX4, shl(96, a3))
+                cX4 := or(cX4, shl(32, a4))
+
+                mstore(ptrC, cX4) // Store packed values in `ptrC`.
+
+                // Keep track of overflow.
+                carry := or(carry, a1)
+                carry := or(carry, a2)
+                carry := or(carry, a3)
+                carry := or(carry, a4)
+            }
+
+            // Advance pointers to the next slot.
+            ptr = ptr + 0x80;
+            ptrC = ptrC + 0x20;
+        }
+
+        // Parse the last remaining chunk.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 2), not(0)))
+                let a1, a2, a3, cX4
+
+                // Load 3 values from `A` at `ptr`.
+                a1 := mload(ptr)
+                a2 := mload(add(0x20, ptr))
+                a3 := mload(add(0x40, ptr))
+
+                // Pack values into `cX4`.
+                cX4 := shl(224, a1)
+                cX4 := or(cX4, shl(160, and(a2, UINT64_MAX)))
+                cX4 := or(cX4, shl(96, and(a3, UINT64_MAX)))
+
+                mstore(ptrC, and(cX4, mask)) // Store packed `c` in `ptrC`.
+
+                // Keep track of overflow.
+                carry := or(carry, a1)
+                carry := or(carry, mul(a2, gt(rest, 0x20)))
+                carry := or(carry, mul(a3, gt(rest, 0x40)))
+            }
+        }
+
+        if (carry > uint256(INT32_MAX)) revert __N32x32.N32x32_Overflow();
+    }
+}
+
+function fromIntEncoded(bytes memory dataBytes) pure returns (M32x32 C) {
+    unchecked {
+        uint256 m = dataBytes.length / 32;
+
+        uint256 ptr;
+
+        assembly {
+            ptr := add(32, dataBytes) // Actual data is located after length encoding.
+        }
+
+        C = mallocM32x32(1, m);
+
+        fromIntPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
+    }
+}
+
+function fromIntPtrTo_(uint256 ptr, M32x32 C) pure {
+    unchecked {
+        (uint256 n, uint256 m, uint256 ptrC) = header(C);
+        // Loop over all `n * m` elements of 32 bytes.
+        uint256 size = n * m * 32;
+        // Up until here we can load & parse full words (4 elements).
+        uint256 end = ptr + (size & ~uint256(127));
+        // The rest needs to be parsed individually.
+        uint256 rest = size & 127;
+        // Keep track of overflow.
+        uint256 carry;
+
+        while (ptr != end) {
+            assembly {
+                let a1, a2, a3, a4, cX4
+
+                // Load 4 values from `A` at `ptr`.
+                a1 := mload(ptr)
+                a2 := mload(add(0x20, ptr))
+                a3 := mload(add(0x40, ptr))
+                a4 := mload(add(0x60, ptr))
+
+                // Pack values into `cX4`.
+                cX4 := shl(224, a1)
+                cX4 := or(cX4, shl(160, and(a2, UINT32_MAX)))
+                cX4 := or(cX4, shl(96, and(a3, UINT32_MAX)))
+                cX4 := or(cX4, shl(32, and(a4, UINT32_MAX)))
+
+                mstore(ptrC, cX4) // Store packed values in `ptrC`.
+
+                // Keep track of overflow.
+                carry := or(carry, add(a1, INT32_SIGN))
+                carry := or(carry, add(a2, INT32_SIGN))
+                carry := or(carry, add(a3, INT32_SIGN))
+                carry := or(carry, add(a4, INT32_SIGN))
+            }
+
+            // Advance pointers to the next slot.
+            ptr = ptr + 0x80;
+            ptrC = ptrC + 0x20;
+        }
+
+        // Parse the last remaining chunk.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 2), not(0)))
+                let a1, a2, a3, cX4
+
+                // Load 3 values from `A` at `ptr`.
+                a1 := mload(ptr)
+                a2 := mload(add(0x20, ptr))
+                a3 := mload(add(0x40, ptr))
+
+                // Pack values into `cX4`.
+                cX4 := shl(224, a1)
+                cX4 := or(cX4, shl(160, and(a2, UINT32_MAX)))
+                cX4 := or(cX4, shl(96, and(a3, UINT32_MAX)))
+
+                mstore(ptrC, and(cX4, mask)) // Store packed `c` in `ptrC`.
+
+                // Keep track of overflow.
+                carry := or(carry, add(a1, INT32_SIGN))
+                carry := or(carry, mul(add(a2, INT32_SIGN), gt(rest, 0x20)))
+                carry := or(carry, mul(add(a3, INT32_SIGN), gt(rest, 0x40)))
+            }
+        }
+
+        if (carry > UINT32_MAX) revert __N32x32.N32x32_Overflow();
+    }
+}
+
+
+function fromIntArray(int256[][] memory data) pure returns (M32x32 C) {
+    unchecked {
+        uint256 n = data.length;
+
+        if (n == 0) return C = mallocM32x32(0, 0);
+
+        uint256 m = data[0].length;
+
+        uint256 rowPtr;
+        assembly {
+            rowPtr := add(data, 0x20)
+        }
+
+        C = mallocM32x32(n, m); // Allocate new matrix of the same dimensions.
+
+        uint256 ptrC = ref(C); // Obtain a reference to `C`s data.
+
+        uint256 carry; // Keep track of overflow.
+        uint256 rowSize = m * 32; // Compute size of row.
+        uint256 rowPtrEnd = rowPtr + n * 32; // Stop after parsing `n` rows.
+
+        while (rowPtr != rowPtrEnd) {
+            uint256 ptr;
+            uint256 rowLen;
+
+            assembly {
+                ptr := mload(rowPtr) // Load row data location.
+                rowLen := mload(ptr) // Load length of row data.
+                ptr := add(ptr, 0x20) // Data starts after 32 bytes.
+            }
+
+            if (rowLen != m) revert M32x32_InvalidDimensions();
+
+            uint256 end = ptr + (rowSize & ~uint256(127)); // Up until here we can load & parse full words (4 elements).
+            uint256 rest = rowSize & 127; // The rest needs to be parsed individually.
+
+            while (ptr != end) {
+                assembly {
+                    let a1, a2, a3, a4, cX4
+
+                    // Load 4 values from `A` at `ptr`.
+                    a1 := mload(ptr)
+                    a2 := mload(add(0x20, ptr))
+                    a3 := mload(add(0x40, ptr))
+                    a4 := mload(add(0x60, ptr))
+
+                    // Pack values into `cX4`.
+                    cX4 := shl(224, a1)
+                    cX4 := or(cX4, shl(160, and(a2, UINT32_MAX)))
+                    cX4 := or(cX4, shl(96, and(a3, UINT32_MAX)))
+                    cX4 := or(cX4, shl(32, and(a4, UINT32_MAX)))
+
+                    mstore(ptrC, cX4) // Store packed values in `ptrC`.
+
+                    // Keep track of overflow.
+                    carry := or(carry, add(a1, INT32_SIGN))
+                    carry := or(carry, add(a2, INT32_SIGN))
+                    carry := or(carry, add(a3, INT32_SIGN))
+                    carry := or(carry, add(a4, INT32_SIGN))
+                }
+
+                // Advance pointers to the next slots.
+                ptr = ptr + 0x80;
+                ptrC = ptrC + 0x20;
+            }
+
+            // Parse the last remaining chunk.
+            if (rest != 0) {
+                assembly {
+                    // Mask applies to leftover bits in word.
+                    let mask := not(shr(mul(rest, 2), not(0)))
+                    let a1, a2, a3, cX4
+
+                    // Load 3 values from `A` at `ptr`.
+                    a1 := mload(ptr)
+                    a2 := mload(add(0x20, ptr))
+                    a3 := mload(add(0x40, ptr))
+
+                    // Pack values into `cX4`.
+                    cX4 := shl(224, a1)
+                    cX4 := or(cX4, shl(160, and(a2, UINT32_MAX)))
+                    cX4 := or(cX4, shl(96, and(a3, UINT32_MAX)))
+
+                    mstore(ptrC, and(cX4, mask)) // Store packed `c` in `ptrC`.
+
+                    // Keep track of overflow.
+                    carry := or(carry, add(a1, INT32_SIGN))
+                    carry := or(carry, mul(add(a2, INT32_SIGN), gt(rest, 0x20)))
+                    carry := or(carry, mul(add(a3, INT32_SIGN), gt(rest, 0x40)))
+
+                    ptrC := add(ptrC, shr(2, rest))
+                }
+            }
+
+            rowPtr = rowPtr + 0x20;
+        }
+
+        if (carry > UINT32_MAX) revert __N32x32.N32x32_Overflow();
     }
 }
 
 /* ------------- unsafe conversions ------------- */
 
-function fromArray(uint8[3][3] memory data) pure returns (M32x32 C) {
+function fromUintArray(uint8[3][3] memory data) pure returns (M32x32 C) {
     C = mallocM32x32(3, 3); // Allocate new matrix of the same dimensions.
 
     uint256 ptr;
@@ -2352,10 +2840,10 @@ function fromArray(uint8[3][3] memory data) pure returns (M32x32 C) {
 
     C = mallocM32x32(3, 3); // Allocate memory for matrix.
 
-    fromUint256PtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
+    fromUintPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
 }
 
-function fromArray(uint8[4][2] memory data) pure returns (M32x32 C) {
+function fromUintArray(uint8[4][2] memory data) pure returns (M32x32 C) {
     uint256 ptr;
 
     assembly {
@@ -2364,10 +2852,10 @@ function fromArray(uint8[4][2] memory data) pure returns (M32x32 C) {
 
     C = mallocM32x32(2, 4); // Allocate memory for matrix.
 
-    fromUint256PtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
+    fromUintPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
 }
 
-function fromArray(uint8[4][4] memory data) pure returns (M32x32 C) {
+function fromUintArray(uint8[4][4] memory data) pure returns (M32x32 C) {
     uint256 ptr;
 
     assembly {
@@ -2376,10 +2864,10 @@ function fromArray(uint8[4][4] memory data) pure returns (M32x32 C) {
 
     C = mallocM32x32(4, 4); // Allocate memory for matrix.
 
-    fromUint256PtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
+    fromUintPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
 }
 
-function fromArray(uint256[2][2] memory data) pure returns (M32x32 C) {
+function fromUintArray(uint256[2][2] memory data) pure returns (M32x32 C) {
     uint256 ptr;
 
     assembly {
@@ -2388,10 +2876,28 @@ function fromArray(uint256[2][2] memory data) pure returns (M32x32 C) {
 
     C = mallocM32x32(2, 2); // Allocate memory for matrix.
 
-    fromUint256PtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
+    fromUintPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
 }
 
-function fromUint256PtrTo_(uint256 ptr, M32x32 C) pure {
+function fromUintArray(uint256[3][3] memory data) pure returns (M32x32 C) {
+    uint256 ptr;
+
+    assembly {
+        ptr := mload(data)
+    }
+
+    C = mallocM32x32(3, 3); // Allocate memory for matrix.
+
+    fromUintPtrTo_(ptr, C); // Copy words from `ptr` to packed `C`.
+}
+
+function fromUintPtr(uint256 ptr, uint256 n, uint256 m) pure returns (M32x32 C) {
+    C = mallocM32x32(n, m);
+
+    fromUintPtrTo_(ptr, C);
+}
+
+function fromUint256PtrToUnsafe_(uint256 ptr, M32x32 C) pure {
     unchecked {
         (uint256 n, uint256 m, uint256 ptrC) = header(C);
         // Loop over all `n * m` elements of 32 bytes.
@@ -2412,10 +2918,10 @@ function fromUint256PtrTo_(uint256 ptr, M32x32 C) pure {
         while (ptr != end) {
             assembly {
                 // Load 4 values from `A` at `ptr`.
-                let aX4 := shl(192, mload(ptr))
-                aX4 := or(aX4, shl(128, mload(add(32, ptr))))
-                aX4 := or(aX4, shl(64, mload(add(64, ptr))))
-                aX4 := or(aX4, mload(add(96, ptr)))
+                let aX4 := shl(224, mload(ptr))
+                aX4 := or(aX4, shl(160, mload(add(0x20, ptr))))
+                aX4 := or(aX4, shl(96, mload(add(0x40, ptr))))
+                aX4 := or(aX4, shl(32, mload(add(0x60, ptr))))
 
                 mstore(ptrC, aX4) // Store packed values in `ptrC`.
             }
@@ -2432,8 +2938,8 @@ function fromUint256PtrTo_(uint256 ptr, M32x32 C) pure {
                 let mask := not(shr(mul(rest, 2), not(0)))
                 // Load 3 values from `A` at `ptr`.
                 let aX4 := shl(192, mload(ptr))
-                aX4 := or(aX4, shl(128, and(mload(add(32, ptr)), UINT64_MASK))) // note: Need to clean bits here.
-                aX4 := or(aX4, shl(64, and(mload(add(64, ptr)), UINT64_MASK))) // note: Need to clean bits here.
+                aX4 := or(aX4, shl(128, mload(add(0x20, ptr))))
+                aX4 := or(aX4, shl(64, mload(add(0x40, ptr))))
 
                 mstore(ptrC, and(aX4, mask)) // Store packed `c` in `ptrC`.
             }
@@ -2442,8 +2948,8 @@ function fromUint256PtrTo_(uint256 ptr, M32x32 C) pure {
 }
 
 function packWordUnsafe(N32x32 a, N32x32 b, N32x32 c, N32x32 d) pure returns (uint256 word) {
-    word = (uint256(uint64(int64(N32x32.unwrap(a)))) << 192) | (uint256(uint64(int64(N32x32.unwrap(b)))) << 128)
-        | (uint256(uint64(int64(N32x32.unwrap(c)))) << 64) | (uint256(uint64(int64(N32x32.unwrap(d)))));
+    word = (uint256(uint64(N32x32.unwrap(a))) << 192) | (uint256(uint64(N32x32.unwrap(b))) << 128)
+        | (uint256(uint64(N32x32.unwrap(c))) << 64) | (uint256(uint64(N32x32.unwrap(d))));
 }
 
 function packWordUnsafe(uint256 a, uint256 b, uint256 c, uint256 d) pure returns (uint256 word) {

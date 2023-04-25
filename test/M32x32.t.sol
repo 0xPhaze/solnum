@@ -41,19 +41,20 @@ contract TestM32x32 is TestHelper {
 
         uint256 memPtr = freeMemPtr();
         uint256 size = n * m * 8;
-        uint256 msize = ((size + 31) / 32) * 32;
+        // uint256 msize = (size + 31) & 31;
+
+        // expectSafeMemoryIncrease(msize + 32);
 
         M32x32 A = zeros(n, m);
 
-        assertEq(freeMemPtr() - memPtr, msize + 32);
         assertEq(A.ref(), memPtr + 32);
 
-        (uint256 nA, uint256 mA, uint256 dataA) = A.header();
+        (uint256 nA, uint256 mA, uint256 refA) = A.header();
 
         assertEq(A, 0);
         assertEq(nA, n);
         assertEq(mA, m);
-        assertEq(dataA, memPtr + 32);
+        assertEq(refA, memPtr + 32);
     }
 
     function test_ones(uint256 n, uint256 m) public {
@@ -165,6 +166,7 @@ contract TestM32x32 is TestHelper {
         M32x32 A = range(1, len + 1).reshape(n, m);
 
         assertEq(A.sum(), N32x32FromUint(len * (len + 1) / 2));
+        assertEq(A.neg().sum(), N32x32FromUint(len * (len + 1) / 2).neg());
     }
 
     function test_mean(uint256 n, uint256 m) public {
@@ -175,6 +177,7 @@ contract TestM32x32 is TestHelper {
 
         M32x32 A = range(1, len + 1).reshape(n, m);
         assertEq(A.mean(), N32x32FromUint(len + 1).divInt(2));
+        assertEq(A.neg().mean(), N32x32FromUint(len + 1).divInt(-2));
     }
 
     function test_vari() public {
@@ -330,17 +333,13 @@ contract TestM32x32 is TestHelper {
         assertEq(m, 3);
     }
 
-    function test_transpose() public {
+    function test_transpose(uint256 n, uint256 m) public {
         log_mat_decimals = 0;
         log_mat_extended = false;
         log_mat_max = 15;
 
-        // n = bound(n, 1, 4);
-        // m = bound(m, 1, 4);
-
-        // covered:
-        // (uint256 n, uint256 m) = (7, 8);
-        (uint256 n, uint256 m) = (7, 3);
+        n = bound(n, 1, 32);
+        m = bound(m, 1, 32);
 
         M32x32 A = range(1, 1 + n * m).reshape(n, m);
 
@@ -348,143 +347,109 @@ contract TestM32x32 is TestHelper {
 
         M32x32 A_T = A.T();
 
-        logMat(A);
-        logMat(A_T);
-        // logMat(A_T.T());
-
-        // assertEq(A_T.T(), A);
-
+        // Note: should be pre-computed.
         assertMagicValueAt(A);
 
-        // uint256 magicValueLoc = appendMagicValue(A_T);
+        assertEq(A_T.dim0(), m);
+        assertEq(A_T.dim1(), n);
 
-        // assertEq(A_T.dim0(), 4);
-        // assertEq(A_T.dim1(), 4);
-        // assertEq(A_T.T(), A);
-
-        // if (n == 1 && m == 1) {
-        //     assertEq(A_T, A);
-        // } else {
-        //     assertNEq(A_T, A);
-        // }
+        assertEq(A_T.T(), A);
     }
 
-    // function test_transpose(uint256 n, uint256 m) public {
-    //     n = bound(n, 1, 2);
-    //     m = bound(m, 1, 2);
-
-    //     n = n * 4;
-    //     m = m * 4;
-
-    //     M32x32 A = range(1, 1 + n * m).reshape(n, m);
-    //     M32x32 A_T = A.T();
-
-    //     assertEq(A_T.dim0(), m);
-    //     assertEq(A_T.dim1(), n);
-    //     assertEq(A_T.T(), A);
-
-    //     if (n == 1 && m == 1) {
-    //         assertEq(A_T, A);
-    //     } else {
-    //         assertNEq(A_T, A);
-    //     }
-    // }
-
     // function test_map() public {
-    //     M32x32 A = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-    //     M32x32 B = fromArray([[4, 7, 10], [13, 16, 19], [22, 25, 28]]);
+    //     M32x32 A = fromUintArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+    //     M32x32 B = fromUintArray([[4, 7, 10], [13, 16, 19], [22, 25, 28]]);
 
     //     assertEq(A.map(affineMap), B);
     // }
 
     /* ------------- Mat x Scalar -> Mat operators ------------- */
 
-    function test_addScalar(uint256 n, uint256 s) public {
+    function test_addScalar(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
         n = bound(n, 1, 20);
-        s = bound(s, 1, UINT256_INT64_MAX);
+        i = bound(i, 0, n - 1);
 
-        M32x32 A = zeros(1, n);
+        // Test on a full matrix.
+        M32x32 A = full(1, n, a);
 
-        // Make sure out of bounds values are not used.
-        appendDirtyBits(A);
+        (bool success, N32x32 c) = a.tryAdd(b);
+        if (!success) vm.expectRevert(N32x32_Overflow.selector);
 
-        assertEq(A.addScalar(s), s);
+        M32x32 C = A.addScalar(b);
+
+        assertEq(C, c);
+
+        // Test on a sparse matrix.
+        A = zeros(1, n);
+        A.set(0, i, a);
+
+        C = A.addScalar(b);
+
+        assertEq(c.gt(b) ? C.max() : C.min(), c);
     }
 
-    function test_addScalarUnchecked(uint256 n, uint256 s) public {
+    function test_addScalarUnchecked(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
         n = bound(n, 1, 20);
-        s = bound(s, 1, UINT64_MASK);
+        i = bound(i, 0, n - 1);
 
-        M32x32 A = zeros(1, n);
+        // Test on a full matrix.
+        M32x32 A = full(1, n, a);
 
-        // Make sure out of bounds values are not used.
-        appendDirtyBits(A);
+        assertEq(A.addScalarUnchecked(b), a.addUnchecked(b));
 
-        assertEq(A.addScalarUnchecked(s), s);
+        // Test on a sparse matrix.
+        A = zeros(1, n);
+        A.set(0, i, a);
+
+        N32x32 c = a.addUnchecked(b);
+        M32x32 C = A.addScalarUnchecked(b);
+
+        assertEq(c.gt(b) ? C.max() : C.min(), c);
     }
 
-    function test_addScalar_revert_overflow(uint256 n) public {
-        M32x32 A = ones(1, bound(n, 1, 20));
+    function test_mulScalar(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
+        n = bound(n, 1, 20);
+        i = bound(i, 0, n - 1);
 
-        vm.expectRevert();
-        A.addScalar(UINT256_INT64_MAX);
+        // Test on a full matrix.
+        M32x32 A = full(1, n, a);
+
+        (bool success, N32x32 c) = a.tryMul(b);
+        if (!success) vm.expectRevert(N32x32_Overflow.selector);
+
+        assertEq(A.mulScalar(b), c);
+
+        // Test on a sparse matrix.
+        A = zeros(1, n);
+        A.set(0, i, a);
+
+        M32x32 C = A.mulScalar(b);
+
+        assertEq(c.isPositive() ? C.max() : C.min(), c);
     }
 
-    function test_addScalar_revert_underflow(uint256 n) public {
-        M32x32 A = ones(1, bound(n, 1, 20));
+    function test_mulScalarUnchecked(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
+        n = bound(n, 1, 20);
+        i = bound(i, 0, n - 1);
 
-        vm.expectRevert();
-        A.addScalar(UINT256_INT64_MIN);
+        // Test on a full matrix.
+        M32x32 A = full(1, n, a);
+
+        assertEq(A.mulScalarUnchecked(b), a.mulUnchecked(b));
+
+        // Test on a sparse matrix.
+        A = zeros(1, n);
+        A.set(0, i, a);
+
+        N32x32 c = a.mulUnchecked(b);
+        M32x32 C = A.mulScalarUnchecked(b);
+
+        assertEq(c.isPositive() ? C.max() : C.min(), c);
     }
 
-    function test_add_revert_overflow(uint256 n) public {
-        M32x32 A = ones(1, bound(n, 1, 20));
-        M32x32 B = full(1, bound(n, 1, 20), MAX);
-
-        logMat(B);
-
-        vm.expectRevert();
-        A.add(B);
-    }
-
-    // TODO
-    // function test_mulScalar(uint256 n, N32x32 s) public {
-    //     n = bound(n, 1, 20);
-    //     s = bound(s, 1, MAX);
-
-    //     M32x32 A = ones(1, n);
-
-    //     // Make sure out of bounds values are not used.
-    //     appendDirtyBits(A);
-
-    //     assertEq(A.mulScalar(s), s);
+    // function test_abs() public {
+    //     M32x32 A = M32x32FromUintArray([[1, 2, 3], [-1, 1, 1]]);
     // }
-
-    function test_mulScalarUnchecked(uint256 n, uint256 s) public {
-        n = bound(n, 1, 20);
-        s = bound(s, 1, UINT64_MASK);
-
-        M32x32 A = ones(1, n);
-
-        // Make sure out of bounds values are not used.
-        appendDirtyBits(A);
-
-        assertEq(A.mulScalarUnchecked(s), s);
-    }
-
-    function test_mulScalar_revert_overflow(uint256 n) public {
-        M32x32 A = ones(1, bound(n, 1, 20)).mulScalar(2);
-
-        vm.expectRevert();
-        A.mulScalar(UINT256_INT64_MAX);
-    }
-
-    function test_mulScalar_revert_underflow(uint256 n) public {
-        M32x32 A = ones(1, bound(n, 1, 20)).mulScalar(2);
-
-        vm.expectRevert();
-        A.mulScalar(UINT256_INT64_MIN);
-    }
 
     function test_fill(uint256 n, uint256 m, N32x32 s) public {
         n = bound(n, 0, 10);
@@ -498,32 +463,57 @@ contract TestM32x32 is TestHelper {
 
     /* ------------- Mat x Mat -> Mat operators ------------- */
 
-    function test_add(uint256 n) public {
+    // TODO add random tests: (a + a) = 2a
+    function test_add(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
         n = bound(n, 1, 20);
+        i = bound(i, 0, n - 1);
 
-        M32x32 A = range(n);
-        M32x32 B = range(n);
+        // Test on a full matrix.
+        M32x32 A = full(1, n, a);
+        M32x32 B = full(1, n, b);
 
-        // Make sure out of bounds values are not used.
-        appendDirtyBits(A);
-        appendDirtyBits(B);
+        (bool success, N32x32 c) = a.tryAdd(b);
+        if (!success) vm.expectRevert(N32x32_Overflow.selector);
 
-        assertEq(A.add(B), A.mulScalarUnchecked(2));
-        assertEq(A.add(zeros(1, n)), A);
+        assertEq(A.add(B), c);
+
+        // Test on a sparse matrix.
+        A = zeros(1, n);
+        B = zeros(1, n);
+        A.set(0, i, a);
+        B.set(0, i, b);
+
+        M32x32 C = A.add(B);
+
+        assertEq(c.isPositive() ? C.max() : C.min(), c);
     }
 
-    function test_addUnchecked(uint256 n) public {
+    function test_addUnchecked(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
         n = bound(n, 1, 20);
+        i = bound(i, 0, n - 1);
 
-        M32x32 A = range(n);
-        M32x32 B = range(n);
+        // Test on a full matrix.
+        M32x32 A = full(1, n, a);
+        M32x32 B = full(1, n, b);
 
-        // Make sure out of bounds values are not used.
-        appendDirtyBits(A);
-        appendDirtyBits(B);
+        assertEq(A.addUnchecked(B), a.addUnchecked(b));
 
-        assertEq(A.addUnchecked(B), A.mulScalarUnchecked(2));
-        assertEq(A.addUnchecked(zeros(1, n)), A);
+        // Test on a sparse matrix.
+        A = zeros(1, n);
+        B = zeros(1, n);
+        A.set(0, i, a);
+        B.set(0, i, b);
+
+        N32x32 c = a.addUnchecked(b);
+        M32x32 C = A.addUnchecked(B);
+
+        // log_mat_extended = true;
+
+        // logMat("A", A);
+        // logMat("B", B);
+        // logMat("C", C);
+
+        assertEq(c.isPositive() ? C.max() : C.min(), c);
     }
 
     // todo: add dot test with magic value
@@ -533,10 +523,10 @@ contract TestM32x32 is TestHelper {
     //     M32x32 B;
     //     M32x32 C;
 
-    //     // A = fromArray([[1]]);
+    //     // A = fromUintArray([[1]]);
     //     // assertEq(A.dot(A), 1);
 
-    //     // A = fromArray([[1, 2]]);
+    //     // A = fromUintArray([[1, 2]]);
     //     // assertEq(A.dot(A), 1);
 
     //     A = range(1, 2);
@@ -554,52 +544,62 @@ contract TestM32x32 is TestHelper {
     //     A = range(1, 8);
     //     assertEq(A.dot(A.T()), 140);
 
-    //     A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-    //     B = fromArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
-    //     C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+    //     A = fromUintArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+    //     B = fromUintArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
+    //     C = fromUintArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
     //     assertEq(A.dot(B), C);
     //     assertNEq(B.dot(A), C);
 
-    //     A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-    //     B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
-    //     C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+    //     A = fromUintArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+    //     B = fromUintArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
+    //     C = fromUintArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
-    //     // M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-    //     // M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-    //     // M32x32 C = fromArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
+    //     // M32x32 A = fromUintArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+    //     // M32x32 B = fromUintArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+    //     // M32x32 C = fromUintArray([[28, 31, 32], [55, 60, 63], [88, 97, 101]]);
 
     //     assertEq(A.dot(B), C);
     //     assertNEq(B.dot(A), C);
     // }
 
-    function test_dotTransposed() public {
-        M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-        M32x32 B = fromArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
-        M32x32 C = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+    function test_dotTransposed() public logs_gas {
+        M32x32 A = fromUintArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+        M32x32 B = fromUintArray([[5, 6, 6], [7, 7, 8], [8, 9, 9]]);
+        M32x32 C = fromUintArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+
+        // logMat("A", A);
+        // logMat("B", B);
+        // logMat("C", C);
 
         assertEq(A.dotTransposed(B), C);
         assertNEq(B.dotTransposed(A), C);
 
-        A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-        B = fromArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
-        C = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+        A = fromUintArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+        B = fromUintArray([[1, 0, 0, 3], [0, 2, 0, 0], [1, 0, 3, 0], [0, 2, 0, 4]]);
+        C = fromUintArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
         assertEq(A.dotTransposed(B), C);
         assertNEq(B.dotTransposed(A), C);
+
+        A.set(0, 1, N32x32FromUint((1 << 31) - 1));
+
+        vm.expectRevert(N32x32_Overflow.selector);
+
+        A.dotTransposed(B);
     }
 
     // function test_dot() public {
-    //     M32x32 A = fromArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
-    //     M32x32 B = fromArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
-    //     M32x32 AB = fromArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
+    //     M32x32 A = fromUintArray([[1, 1, 2], [2, 3, 3], [4, 4, 5]]);
+    //     M32x32 B = fromUintArray([[5, 7, 8], [6, 7, 9], [6, 8, 9]]);
+    //     M32x32 AB = fromUintArray([[23, 30, 35], [46, 59, 70], [74, 96, 113]]);
 
     //     assertEq(A.dot(B), AB);
     //     assertNEq(B.dot(A), AB);
 
-    //     A = fromArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
-    //     B = fromArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
-    //     AB = fromArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
+    //     A = fromUintArray([[1, 1, 0, 0], [0, 2, 2, 0], [0, 0, 3, 3], [4, 0, 4, 0]]);
+    //     B = fromUintArray([[1, 0, 1, 0], [0, 2, 0, 2], [0, 0, 3, 0], [3, 0, 0, 4]]);
+    //     AB = fromUintArray([[1, 2, 1, 2], [0, 4, 6, 4], [9, 0, 9, 12], [4, 0, 16, 0]]);
 
     //     assertEq(A.dot(B), AB);
     //     assertNEq(B.dot(A), AB);
@@ -690,13 +690,177 @@ contract TestM32x32 is TestHelper {
 
     /* ------------- conversions ------------- */
 
-    // function test_fromArray() public {
-    //     M32x32 A = fromArray([[1, 2, 3, 4], [5, 6, 7, 8]]);
-    //     M32x32 B = fromArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+    // function test_fromUintArray() public {
+    //     M32x32 A = fromUintArray([[1, 2, 3, 4], [5, 6, 7, 8]]);
+    //     M32x32 B = fromUintArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
     //     assertEq(A, range(1, 9).reshape(2, 4));
     //     assertEq(B, range(1, 10).reshape(3, 3));
+
+    //     vm.expectRevert(N32x32_Overflow.selector);
+
+    //     B = fromUintArray([[uint256(1 << 32), 2, 3], [uint256(4), 5, 6], [uint256(7), 8, 9]]);
     // }
+
+    function test_fromUintArray(uint256 n, uint256 m) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
+
+        uint256[][] memory array = rangeUintArray(0, n, m);
+
+        M32x32 A = fromUintArray(array);
+
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.at(i / m, i % m), N32x32FromUint(array[i / m][i % m]));
+        }
+    }
+
+    function test_fromUintArray_revert_Overflow(uint256 n, uint256 m, uint256 i, uint256 a) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
+        i = bound(i, 0, n * m - 1);
+
+        uint256[][] memory array = rangeUintArray(0, n, m);
+        array[i / m][i % m] = a;
+
+        // if (a > type(uint64).max) vm.expectRevert(N32x32_Overflow.selector); // Note: good example of bad testing.
+        if (a > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
+
+        fromUintArray(array);
+    }
+
+    function test_fromIntArray(uint256 n, uint256 m) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
+
+        int256[][] memory array = rangeIntArray(0, n, m);
+
+        M32x32 A = fromIntArray(array);
+
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.at(i / m, i % m).toInt(), array[i / m][i % m]);
+        }
+    }
+
+    function test_fromIntArray_revert_Overflow(uint256 n, uint256 m, uint256 i, int256 a) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
+        i = bound(i, 0, n * m - 1);
+
+        int256[][] memory array = rangeIntArray(0, n, m);
+        array[i / m][i % m] = a;
+
+        if (a < type(int32).min || a > type(int32).max) vm.expectRevert(N32x32_Overflow.selector);
+
+        fromIntArray(array);
+    }
+
+    function rangeIntArray(int256 start, uint256 n, uint256 m) internal pure returns (int256[][] memory array) {
+        uint256[][] memory array_ = rangeUintArray(uint256(start), n, m);
+
+        assembly {
+            array := array_
+        }
+    }
+
+    function rangeUintArray(uint256 start, uint256 n, uint256 m) internal pure returns (uint256[][] memory array) {
+        array = new uint256[][](n);
+
+
+        for (uint256 i; i < n; i++) {
+            array[i] = new uint256[](m);
+        }
+
+        unchecked {
+            for (uint256 i; i < n * m; i++) {
+                array[i / m][i % m] = start + i;
+            }
+        }
+    }
+
+
+    
+
+
+    function test_fromUintEncoded() public {
+        M32x32 A = fromUintEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
+        M32x32 B = fromUintEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]));
+
+        assertEq(A, range(1, 9));
+        assertEq(B, range(1, 10));
+    }
+
+    function test_fromUintEncoded(uint32[4][3] memory data) public {
+        uint256 n = 3;
+        uint256 m = 4;
+
+        for (uint256 i; i < n * m; i++) {
+            data[i / m][i % m] = uint32(bound(data[i / m][i % m], 0, uint256(INT32_MAX)));
+        }
+
+        M32x32 A = fromUintEncoded(abi.encode(data));
+
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.atIndex(i).toUint(), data[i / m][i % m]);
+        }
+    }
+
+    function test_fromUintEncoded_revert_Overflow(uint64[4][4] memory data) public {
+        uint256 n = 4;
+        uint256 m = 4;
+
+        uint256 max;
+
+        for (uint256 i; i < n * m; i++) {
+            if (data[i / m][i % m] > max) max = data[i / m][i % m];
+        }
+
+        if (max > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
+
+
+        M32x32 A = fromUintEncoded(abi.encode(data));
+    }
+
+    function test_fromIntEncoded() public {
+        M32x32 A = fromIntEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
+        M32x32 B = fromIntEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]));
+
+        assertEq(A, range(1, 9));
+        assertEq(B, range(1, 10));
+    }
+
+    function test_fromIntEncoded(int32[4][3] memory data) public {
+        uint256 n = 3;
+        uint256 m = 4;
+
+        for (uint256 i; i < n * m; i++) {
+            data[i / m][i % m] = int32(int256(bound(uint32(data[i / m][i % m]), 0, uint256(UINT32_MAX))));
+        }
+
+        M32x32 A = fromIntEncoded(abi.encode(data));
+
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.atIndex(i).toInt(), data[i / m][i % m]);
+        }
+    }
+
+    function test_fromIntEncoded_revert_Overflow(int256[4][4] memory data) public {
+        uint256 n = 4;
+        uint256 m = 4;
+
+        for (uint256 i; i < n * m; i++) {
+            int256 a = data[i / m][i % m];
+            if (a < type(int32).min || a > type(int32).max) {
+                vm.expectRevert(N32x32_Overflow.selector);
+                break;
+            }
+        }
+
+        M32x32 A = fromIntEncoded(abi.encode(data));
+    }
+
+
+
 
     uint256 constant UINT256_INT64_MAX = uint256(uint64(type(int64).max));
     uint256 constant UINT256_INT64_MIN = uint256(uint64(type(int64).min));

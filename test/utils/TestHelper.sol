@@ -1,16 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { N32x32, UINT64_MASK, ZERO, ONE } from "src/N32x32.sol";
+import { N32x32, UINT64_MAX, ZERO, ONE } from "src/N32x32.sol";
 import { M32x32 } from "src/M32x32.sol";
 import { UM256 } from "src/UM256.sol";
 
 import "forge-std/Test.sol";
 
+interface VmMemSafe is Vm {
+    // Only allows memory writes to offsets [0x00, 0x60) ∪ [_min, _max) in the current subcontext. If any other
+    // memory is written to, the test will fail.
+    function expectSafeMemory(uint64 _min, uint64 _max) external;
+
+    // Only allows memory writes to offsets [0x00, 0x60) ∪ [_min, _max) in the next created subcontext.
+    // If any other memory is written to, the test will fail.
+    function expectSafeMemoryCall(uint64 _min, uint64 _max) external;
+}
+
 contract TestHelper is Test {
+    VmMemSafe vm2 = VmMemSafe(address(vm));
+
     bool log_mat_extended = false;
     uint256 log_mat_max = 10;
     uint256 log_mat_decimals = 2;
+
+    function expectSafeMemoryIncrease(uint256 size) internal {
+        uint256 memPtr = freeMemPtr();
+
+        vm2.expectSafeMemory(uint64(memPtr), uint64(memPtr + size));
+    }
 
     /* ------------- N32x32 ------------- */
 
@@ -372,7 +390,7 @@ contract TestHelper is Test {
         uint256 lenUp = ((len * 8 + 31) & ~uint256(31)) / 8;
 
         while (lenUp != len) {
-            A.setUnsafe(0, lenUp - 1, N32x32.wrap(int64(uint64(UINT64_MASK))));
+            A.setUnsafe(0, lenUp - 1, N32x32.wrap(int64(uint64(UINT64_MAX))));
 
             lenUp -= 1;
         }
@@ -424,10 +442,10 @@ contract TestHelper is Test {
         int256 ua = int64(N32x32.unwrap(a));
         bool sign = ua < 0;
         uint256 abs = uint256(sign ? -ua : ua);
-        int256 upper = ua >> 32;
+        uint256 upper = abs >> 32;
         uint256 lower = (uint256(uint32(abs)) * (10 ** decimals) + (1 << 31)) >> 32;
 
-        repr = string.concat(toString(upper), ".", decimals != 0 ? toString(lower) : "");
+        repr = string.concat(sign ? "-" : "", toString(upper), ".", decimals != 0 ? toString(lower, decimals) : "");
 
         if (log_mat_extended) repr = string.concat(repr, " [", toHexString(uint64(uint256(ua)), 8), "]");
     }
@@ -443,11 +461,12 @@ contract TestHelper is Test {
     function logMat(string memory name, UM256 A) internal {
         (uint256 n, uint256 m) = A.shape();
 
-        string memory repr = string.concat("\nUM256(", toString(n), ",", toString(m), "): ", name, "\n");
+        string memory repr = string.concat("\nUM256(", toString(n), ",", toString(m), "): ", name, "\n\n");
 
         uint256 max = log_mat_max;
 
         for (uint256 i; i < n && i < max; ++i) {
+            repr = string.concat(repr, "\t");
             for (uint256 j; j < m && j < max; ++j) {
                 if (j == max - 1 && max < m) repr = string.concat(repr, "..\t");
                 else if (i == max - 1 && max < n) repr = string.concat(repr, "..");
@@ -467,14 +486,19 @@ contract TestHelper is Test {
         logMat("", A, decimals);
     }
 
+    function logMat(string memory name, M32x32 A) internal {
+        logMat(name, A, log_mat_decimals);
+    }
+
     function logMat(string memory name, M32x32 A, uint256 decimals) internal {
         (uint256 n, uint256 m) = A.shape();
 
-        string memory repr = string.concat("\nM32x32(", toString(n), ",", toString(m), "): ", name, "\n");
+        string memory repr = string.concat("\nM32x32(", toString(n), ",", toString(m), "): ", name, "\n\n");
 
         uint256 max = log_mat_max + 1;
 
         for (uint256 i; i < n && i < max; ++i) {
+            repr = string.concat(repr, "\t");
             for (uint256 j; j < m && j < max; ++j) {
                 if (j == max - 1 && max < m) repr = string.concat(repr, "..");
                 else if (i == max - 1 && max < n) repr = string.concat(repr, "..\t");
@@ -564,24 +588,62 @@ contract TestHelper is Test {
         }
     }
 
-    /// @dev Returns the base 10 decimal representation of `value`.
-    function toString(int256 value) internal pure returns (string memory str) {
-        if (value >= 0) {
-            return toString(uint256(value));
-        }
-        unchecked {
-            str = toString(uint256(-value));
-        }
+    function toString(uint256 value, uint256 digits) internal pure returns (string memory str) {
         /// @solidity memory-safe-assembly
         assembly {
-            // We still have some spare memory space on the left,
-            // as we have allocated 3 words (96 bytes) for up to 78 digits.
-            let length := mload(str) // Load the string length.
-            mstore(str, 0x2d) // Store the '-' character.
-            str := sub(str, 1) // Move back the string pointer by a byte.
-            mstore(str, add(length, 1)) // Update the string length.
+            // The maximum value of a uint256 contains 78 digits (1 byte per digit), but
+            // we allocate 0xa0 bytes to keep the free memory pointer 32-byte word aligned.
+            // We will need 1 word for the trailing zeros padding, 1 word for the length,
+            // and 3 words for a maximum of 78 digits.
+            str := add(mload(0x40), 0x80)
+            // Update the free memory pointer to allocate.
+            mstore(0x40, add(str, 0x20))
+            // Zeroize the slot after the string.
+            mstore(str, 0)
+
+            // Cache the end of the memory to calculate the length later.
+            let end := str
+
+            let w := not(0) // Tsk.
+            // We write the string from rightmost digit to leftmost digit.
+            // The following is essentially a do-while loop that also handles the zero case.
+            for { let temp := value } 1 { } {
+                str := add(str, w) // `sub(str, 1)`.
+                // Write the character to the pointer.
+                // The ASCII index of the '0' character is 48.
+                mstore8(str, add(48, mod(temp, 10)))
+                // Keep dividing `temp` until zero.
+                temp := div(temp, 10)
+                digits := sub(digits, 1)
+                if iszero(digits) { break }
+            }
+
+            let length := sub(end, str)
+            // Move the pointer 32 bytes leftwards to make room for the length.
+            str := sub(str, 0x20)
+            // Store the length.
+            mstore(str, length)
         }
     }
+
+    // /// @dev Returns the base 10 decimal representation of `value`.
+    // function toString(int256 value) internal pure returns (string memory str) {
+    //     if (value >= 0) {
+    //         return toString(uint256(value));
+    //     }
+    //     unchecked {
+    //         str = toString(uint256(-value));
+    //     }
+    //     /// @solidity memory-safe-assembly
+    //     assembly {
+    //         // We still have some spare memory space on the left,
+    //         // as we have allocated 3 words (96 bytes) for up to 78 digits.
+    //         let length := mload(str) // Load the string length.
+    //         mstore(str, 0x2d) // Store the '-' character.
+    //         str := sub(str, 1) // Move back the string pointer by a byte.
+    //         mstore(str, add(length, 1)) // Update the string length.
+    //     }
+    // }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                   HEXADECIMAL OPERATIONS                   */

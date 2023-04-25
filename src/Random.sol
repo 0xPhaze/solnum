@@ -5,11 +5,12 @@ import "./UM256.sol" as UM256Lib;
 import "./M32x32.sol" as M32x32Lib;
 
 import { UM256, mallocUM256 } from "./UM256.sol";
-import { M32x32, mallocM32x32, UINT32_MASK } from "./M32x32.sol";
+import { M32x32, mallocM32x32, UINT32_MAX } from "./M32x32.sol";
+import { UINT64_MAX } from "./N32x32.sol";
 
 type Random is uint256;
 
-using { next, getSeed, rand, randn, randUM256 } for Random global;
+using { randUint, randInt, getSeed, rand, randn, randUM256 } for Random global;
 
 function seed(uint256 randomSeed) pure returns (Random r) {
     assembly {
@@ -25,7 +26,14 @@ function getSeed(Random r) pure returns (uint256 randomSeed) {
     }
 }
 
-function next(Random r) pure returns (uint256 value) {
+function randUint(Random r) pure returns (uint256 value) {
+    assembly {
+        value := keccak256(r, 32)
+        mstore(r, value)
+    }
+}
+
+function randInt(Random r) pure returns (int256 value) {
     assembly {
         value := keccak256(r, 32)
         mstore(r, value)
@@ -62,8 +70,12 @@ function randUM256(Random r, uint256 n, uint256 m) pure returns (UM256 A) {
     }
 }
 
-uint256 constant MASK_M32x32_FRACTIONS_X4 = 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff;
+uint256 constant UINT8_MAX_X16 = 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff;
+uint256 constant UINT16_MAX_X8 = 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff;
+uint256 constant UINT32_MAX_X4 = 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff;
 uint256 constant HALF_M32x32_X4 = 0x0000000080000000000000008000000000000000800000000000000080000000;
+uint256 constant ONES_X4 = 0x0000000000000001000000000000000100000000000000010000000000000001;
+// uint256 constant ONES_X4 = 0x0000000100000000000000010000000000000001000000000000000100000000;
 
 function rand(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
     unchecked {
@@ -88,11 +100,11 @@ function rand(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                let aX4 := shr(32, and(randomSeed, shl(32, MASK_M32x32_FRACTIONS_X4))) // Apply mask to fractional part.
+                let aX4 := shr(32, and(randomSeed, not(UINT32_MAX_X4))) // Apply mask to fractional part.
                 mstore(ptr, aX4) // Store packed `a` at current pointer location.
                 ptr := add(ptr, 32) // Advance pointer to the next slot.
 
-                aX4 := and(randomSeed, MASK_M32x32_FRACTIONS_X4) // Apply mask to fractional part.
+                aX4 := and(randomSeed, UINT32_MAX_X4) // Apply mask to fractional part.
                 mstore(ptr, aX4) // Store packed `a` at current pointer location.
                 ptr := add(ptr, 32) // Advance pointer to the next slot.
             }
@@ -108,7 +120,7 @@ function rand(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
 
             if (rest >= 32) {
                 assembly {
-                    aX4 := shr(32, and(randomSeed, shl(32, MASK_M32x32_FRACTIONS_X4))) // Apply mask to fractional part.
+                    aX4 := shr(32, and(randomSeed, shl(32, UINT32_MAX_X4))) // Apply mask to fractional part.
                     mstore(ptr, aX4) // Store packed `a` at current pointer location.
                     ptr := add(ptr, 32) // Advance pointer to the next slot.
                 }
@@ -118,7 +130,7 @@ function rand(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
 
             assembly {
                 // let mask := not(shr(mul(rest, 8), not(0))) // Mask applies to leftover bits in word.
-                aX4 := and(randomSeed, MASK_M32x32_FRACTIONS_X4) // Apply mask to fractional part.
+                aX4 := and(randomSeed, UINT32_MAX_X4) // Apply mask to fractional part.
                 mstore(ptr, aX4) // Store packed `a` at current pointer location.
             }
         }
@@ -127,6 +139,30 @@ function rand(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
 
 uint256 constant RANDN_MAX_ITER = 2;
 
+/// We use the central limit theorem for sampling from
+/// the normal distribution, given a uniform sampling method.
+///
+/// 𝑁(0,1) ≈ √𝑛(𝑆𝑛−𝜇)/𝜎
+///
+/// Sn = ∑Xi , where Xi is uniformly sampled.
+///
+/// We sample 8 numbers from the interval [0, 1].
+/// Then √𝑛 = 4, 𝜎 = √12
+///
+/// We use packed multiplication and summation.
+/// The idea is the following:
+///     0xaaaabbbbcccc * 0x000100001
+/// =   0xaaaabbbbcccc * 0x000000001
+///   + 0xaaaabbbbcccc * 0x000100000
+/// =   0x00000000aaaabbbbcccc
+///   + 0x0000aaaabbbbcccc0000
+///   + 0xaaaabbbbcccc00000000
+/// =   0x00000000aaaa00000000
+///   + 0x00000000bbbb00000000
+///   + 0x00000000cccc00000000
+///     0x000000000000bbbbcccc
+///   + 0x00000000bbbbcccc0000
+///   + 0x0000bbbbcccc00000000
 function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
     unchecked {
         // Allocate memory for matrix.
@@ -147,98 +183,60 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
             // uint256 iter;
 
             // while (iter < RANDN_MAX_ITER) {
-            uint256 r1;
-            uint256 r2;
-            uint256 r3;
-            uint256 r4;
             assembly {
-                randomSeed := keccak256(r, 32) // Generate a new random number.
-                mstore(r, randomSeed) // Store the updated random seed in `r`.
-
-                // Sum all 8 fractional random numbers together
-                r1 := and(randomSeed, UINT32_MASK)
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r1 := add(r1, randomSeed)
-                r1 := div(sub(r1, shl(4, 32)), 8)
+                let rn, rX4
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                r2 := and(randomSeed, UINT32_MASK)
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r2 := add(r2, randomSeed)
-                r2 := div(sub(r2, shl(4, 32)), 8)
+                // Sample a random normal variable.
+                rn := and(randomSeed, UINT32_MAX_X4) // Add masked halves together.
+                rn := add(rn, shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                rn := mul(rn, ONES_X4) // Multiply by `1 + (1 << 64) + (1 << 128) + (1 << 192)`.
+                rn := shr(195, rn) // The sum is located at bit pos 192. Divide by `N = 8`.
+                rn := sub(rn, 0x80000000) // Center.
+                rn := shr(32, mul(rn, 42081913348)) // Multiply by `sqrt(N / variance) = sqrt(8 * 12) << 32`.
+
+                rX4 := and(rn, UINT64_MAX)
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                r3 := and(randomSeed, UINT32_MASK)
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r3 := add(r3, randomSeed)
-                r3 := div(sub(r3, shl(4, 32)), 8)
+                // Sample a random normal variable.
+                rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                rn := shr(32, mul(sub(shr(195, mul(rn, ONES_X4)), 0x80000000), 42081913348))
+
+                rX4 := or(rX4, shl(64, and(rn, UINT64_MAX)))
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                r4 := and(randomSeed, UINT32_MASK)
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, and(randomSeed, UINT32_MASK))
-                randomSeed := shr(32, randomSeed)
-                r4 := add(r4, randomSeed)
-                r4 := div(sub(r4, shl(4, 32)), 8)
-            }
+                // Sample a random normal variable.
+                rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                rn := shr(32, mul(sub(shr(195, mul(rn, ONES_X4)), 0x80000000), 42081913348))
 
-            uint256 rX4 = M32x32Lib.packWordUnsafe(r1, r2, r3, r4);
+                rX4 := or(rX4, shl(128, and(rn, UINT64_MAX)))
 
-            assembly {
+                randomSeed := keccak256(r, 32) // Generate a new random number.
+                mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                // Sample a random normal variable.
+                rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                rn := shr(32, mul(sub(shr(195, mul(rn, ONES_X4)), 0x80000000), 42081913348))
+
+                rX4 := or(rX4, shl(192, rn))
+
+                randomSeed := keccak256(r, 32) // Generate a new random number.
+                mstore(r, randomSeed) // Store the updated random seed in `r`.
+
                 mstore(ptr, rX4)
             }
+
+            // uint256 rX4 = M32x32Lib.packWordUnsafe(r1, r2, r3, r4);
+
+            // assembly {
+            //     mstore(ptr, rX4)
+            // }
 
             ptr = ptr + 32;
         }
