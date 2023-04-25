@@ -1989,11 +1989,11 @@ function abs(M32x32 A) pure returns (M32x32 C) {
         // Up until here we can load & parse full words (4 elements).
         uint256 endA = ptrA + (size & ~uint256(31));
         // The rest needs to be parsed individually.
-        // uint256 rest = size & 31;
+        uint256 rest = size & 31;
         // Obtain a pointer to `C`s data location.
         uint256 ptrC = ref(C);
         // Keep track of carry bits.
-        // bool overflow;
+        bool overflow;
 
         // Loop over 32 byte words.
         while (ptrA != endA) {

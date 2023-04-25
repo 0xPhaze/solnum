@@ -40,8 +40,8 @@ contract TestM32x32 is TestHelper {
         m = bound(m, 0, 10);
 
         uint256 memPtr = freeMemPtr();
-        // uint256 size = n * m * 8;
-        // uint256 msize = (size + 31) & 31;
+        uint256 size = n * m * 8;
+        uint256 msize = (size + 31) & 31;
 
         // expectSafeMemoryIncrease(msize + 32);
 
@@ -632,8 +632,7 @@ contract TestM32x32 is TestHelper {
     // 1025, 1090, 1130, 1220, 1310, 1400, 1490, 1430, 1545, 1660, 1775, 1890]));//forgefmt: disable-line
     //     C[15] = fromAbiEncoded(abi.encode([112]));//forgefmt: disable-line
     //     C[16] = fromAbiEncoded(abi.encode([182, 203, 434, 491]));//forgefmt: disable-line
-    //     C[17] = fromAbiEncoded(abi.encode([ 252,  273,  294,  594,  651,  708,  936, 1029, 1122]));//forgefmt:
-    // disable-line
+    //     C[17] = fromAbiEncoded(abi.encode([ 252,  273,  294,  594,  651,  708,  936, 1029, 1122]));//forgefmt: disable-line
     //     C[18] = fromAbiEncoded(abi.encode([ 322,  343,  364,  385,  754,  811,  868,  925, 1186, 1279, 1372, 1465,
     // 1618, 1747, 1876, 2005]));//forgefmt: disable-line
     //     C[19] = fromAbiEncoded(abi.encode([ 392,  413,  434,  455,  476,  914,  971, 1028, 1085, 1142, 1436, 1529,
@@ -643,8 +642,7 @@ contract TestM32x32 is TestHelper {
     // 3723, 3924, 4125, 4326, 4527]));//forgefmt: disable-line
     //     C[21] = fromAbiEncoded(abi.encode([168]));//forgefmt: disable-line
     //     C[22] = fromAbiEncoded(abi.encode([280, 308, 672, 749]));//forgefmt: disable-line
-    //     C[23] = fromAbiEncoded(abi.encode([ 392,  420,  448,  931, 1008, 1085, 1470, 1596, 1722]));//forgefmt:
-    // disable-line
+    //     C[23] = fromAbiEncoded(abi.encode([ 392,  420,  448,  931, 1008, 1085, 1470, 1596, 1722]));//forgefmt: disable-line
     //     C[24] = fromAbiEncoded(abi.encode([ 504,  532,  560,  588, 1190, 1267, 1344, 1421, 1876, 2002, 2128, 2254,
     // 2562, 2737, 2912, 3087]));//forgefmt: disable-line
     //     C[25] = fromAbiEncoded(abi.encode([ 616,  644,  672,  700,  728, 1449, 1526, 1603, 1680, 1757, 2282, 2408,
@@ -658,8 +656,7 @@ contract TestM32x32 is TestHelper {
     // 9534]));//forgefmt: disable-line
     //     C[28] = fromAbiEncoded(abi.encode([240]));//forgefmt: disable-line
     //     C[29] = fromAbiEncoded(abi.encode([ 408,  444,  984, 1084]));//forgefmt: disable-line
-    //     C[30] = fromAbiEncoded(abi.encode([ 576,  612,  648, 1376, 1476, 1576, 2176, 2340, 2504]));//forgefmt:
-    // disable-line
+    //     C[30] = fromAbiEncoded(abi.encode([ 576,  612,  648, 1376, 1476, 1576, 2176, 2340, 2504]));//forgefmt: disable-line
     //     C[31] = fromAbiEncoded(abi.encode([ 744,  780,  816,  852, 1768, 1868, 1968, 2068, 2792, 2956, 3120, 3284,
     // 3816, 4044, 4272, 4500]));//forgefmt: disable-line
     //     C[32] = fromAbiEncoded(abi.encode([ 912,  948,  984, 1020, 1056, 2160, 2260, 2360, 2460, 2560, 3408, 3572,
@@ -669,8 +666,7 @@ contract TestM32x32 is TestHelper {
     // 10220]));//forgefmt: disable-line
     //     C[34] = fromAbiEncoded(abi.encode([ 1248,  1284,  1320,  1356,  1392,  1428,  1464,  2944,  3044, 3144,  3244,  3344,  3444,  3544,  4640,  4804,  4968,  5132,
     // 5296,  5460,  5624,  6336,  6564,  6792,  7020,  7248,  7476, 7704,  8032,  8324,  8616,  8908,  9200,  9492,  9784,  9728,
-    // 10084, 10440, 10796, 11152, 11508, 11864, 11424, 11844, 12264, 12684, 13104, 13524, 13944]));//forgefmt:
-    // disable-line
+    // 10084, 10440, 10796, 11152, 11508, 11864, 11424, 11844, 12264, 12684, 13104, 13524, 13944]));//forgefmt: disable-line
     //     C[35] = fromAbiEncoded(abi.encode([ 1416,  1452,  1488,  1524,  1560,  1596,  1632,  1668,  3336, 3436,  3536,  3636,  3736,  3836,  3936,  4036,  5256,  5420,
     // 5584,  5748,  5912,  6076,  6240,  6404,  7176,  7404,  7632, 7860,  8088,  8316,  8544,  8772,  9096,  9388,  9680,  9972,
     // 10264, 10556, 10848, 11140, 11016, 11372, 11728, 12084, 12440, 12796, 13152, 13508, 12936, 13356, 13776, 14196,
@@ -690,171 +686,172 @@ contract TestM32x32 is TestHelper {
 
     /* ------------- conversions ------------- */
 
-    // function test_fromUintArray() public {
-    //     M32x32 A = fromUintArray([[1, 2, 3, 4], [5, 6, 7, 8]]);
-    //     M32x32 B = fromUintArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+    function test_fromUintArray() public {
+        M32x32 A = fromUintArray([[1, 2, 3, 4], [5, 6, 7, 8]]);
+        M32x32 B = fromUintArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
-    //     assertEq(A, range(1, 9).reshape(2, 4));
-    //     assertEq(B, range(1, 10).reshape(3, 3));
+        assertEq(A, range(1, 9).reshape(2, 4));
+        assertEq(B, range(1, 10).reshape(3, 3));
 
-    //     vm.expectRevert(N32x32_Overflow.selector);
+        vm.expectRevert(N32x32_Overflow.selector);
 
-    //     B = fromUintArray([[uint256(1 << 32), 2, 3], [uint256(4), 5, 6], [uint256(7), 8, 9]]);
-    // }
+        B = fromUintArray([[uint256(1 << 32), 2, 3], [uint256(4), 5, 6], [uint256(7), 8, 9]]);
+    }
 
-    // function test_fromUintArray(uint256 n, uint256 m) public {
-    //     n = bound(n, 1, 3);
-    //     m = bound(m, 1, 10);
+    function test_fromUintArray(uint256 n, uint256 m) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
 
-    //     uint256[][] memory array = rangeUintArray(0, n, m);
+        uint256[][] memory array = rangeUintArray(0, n, m);
 
-    //     M32x32 A = fromUintArray(array);
+        M32x32 A = fromUintArray(array);
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         assertEq(A.at(i / m, i % m), N32x32FromUint(array[i / m][i % m]));
-    //     }
-    // }
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.at(i / m, i % m), N32x32FromUint(array[i / m][i % m]));
+        }
+    }
 
-    // function test_fromUintArray_revert_Overflow(uint256 n, uint256 m, uint256 i, uint256 a) public {
-    //     n = bound(n, 1, 3);
-    //     m = bound(m, 1, 10);
-    //     i = bound(i, 0, n * m - 1);
+    function test_fromUintArray_revert_Overflow(uint256 n, uint256 m, uint256 i, uint256 a) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
+        i = bound(i, 0, n * m - 1);
 
-    //     uint256[][] memory array = rangeUintArray(0, n, m);
-    //     array[i / m][i % m] = a;
+        uint256[][] memory array = rangeUintArray(0, n, m);
+        array[i / m][i % m] = a;
 
-    //     // if (a > type(uint64).max) vm.expectRevert(N32x32_Overflow.selector); // Note: good example of bad testing.
-    //     if (a > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
+        // if (a > type(uint64).max) vm.expectRevert(N32x32_Overflow.selector); // Note: good example of bad testing.
+        if (a > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
 
-    //     fromUintArray(array);
-    // }
+        fromUintArray(array);
+    }
 
-    // function test_fromIntArray(uint256 n, uint256 m) public {
-    //     n = bound(n, 1, 3);
-    //     m = bound(m, 1, 10);
+    function test_fromIntArray(uint256 n, uint256 m) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
 
-    //     int256[][] memory array = rangeIntArray(0, n, m);
+        int256[][] memory array = rangeIntArray(0, n, m);
 
-    //     M32x32 A = fromIntArray(array);
+        M32x32 A = fromIntArray(array);
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         assertEq(A.at(i / m, i % m).toInt(), array[i / m][i % m]);
-    //     }
-    // }
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.at(i / m, i % m).toInt(), array[i / m][i % m]);
+        }
+    }
 
-    // function test_fromIntArray_revert_Overflow(uint256 n, uint256 m, uint256 i, int256 a) public {
-    //     n = bound(n, 1, 3);
-    //     m = bound(m, 1, 10);
-    //     i = bound(i, 0, n * m - 1);
+    function test_fromIntArray_revert_Overflow(uint256 n, uint256 m, uint256 i, int256 a) public {
+        n = bound(n, 1, 3);
+        m = bound(m, 1, 10);
+        i = bound(i, 0, n * m - 1);
 
-    //     int256[][] memory array = rangeIntArray(0, n, m);
-    //     array[i / m][i % m] = a;
+        int256[][] memory array = rangeIntArray(0, n, m);
+        array[i / m][i % m] = a;
 
-    //     if (a < type(int32).min || a > type(int32).max) vm.expectRevert(N32x32_Overflow.selector);
+        if (a < type(int32).min || a > type(int32).max) vm.expectRevert(N32x32_Overflow.selector);
 
-    //     fromIntArray(array);
-    // }
+        fromIntArray(array);
+    }
 
-    // function rangeIntArray(int256 start, uint256 n, uint256 m) internal pure returns (int256[][] memory array) {
-    //     uint256[][] memory array_ = rangeUintArray(uint256(start), n, m);
+    function rangeIntArray(int256 start, uint256 n, uint256 m) internal pure returns (int256[][] memory array) {
+        uint256[][] memory array_ = rangeUintArray(uint256(start), n, m);
 
-    //     assembly {
-    //         array := array_
-    //     }
-    // }
+        assembly {
+            array := array_
+        }
+    }
 
-    // function rangeUintArray(uint256 start, uint256 n, uint256 m) internal pure returns (uint256[][] memory array) {
-    //     array = new uint256[][](n);
+    function rangeUintArray(uint256 start, uint256 n, uint256 m) internal pure returns (uint256[][] memory array) {
+        array = new uint256[][](n);
 
-    //     for (uint256 i; i < n; i++) {
-    //         array[i] = new uint256[](m);
-    //     }
+        for (uint256 i; i < n; i++) {
+            array[i] = new uint256[](m);
+        }
 
-    //     unchecked {
-    //         for (uint256 i; i < n * m; i++) {
-    //             array[i / m][i % m] = start + i;
-    //         }
-    //     }
-    // }
+        unchecked {
+            for (uint256 i; i < n * m; i++) {
+                array[i / m][i % m] = start + i;
+            }
+        }
+    }
 
-    // function test_fromUintEncoded() public {
-    //     M32x32 A = fromUintEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
-    //     M32x32 B = fromUintEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]));
+    function test_fromUintEncoded() public {
+        M32x32 A = fromUintEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
+        M32x32 B = fromUintEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]));
 
-    //     assertEq(A, range(1, 9));
-    //     assertEq(B, range(1, 10));
-    // }
+        assertEq(A, range(1, 9));
+        assertEq(B, range(1, 10));
+    }
 
-    // function test_fromUintEncoded(uint32[4][3] memory data) public {
-    //     uint256 n = 3;
-    //     uint256 m = 4;
+    function test_fromUintEncoded(uint32[4][3] memory data) public {
+        uint256 n = 3;
+        uint256 m = 4;
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         data[i / m][i % m] = uint32(bound(data[i / m][i % m], 0, uint256(INT32_MAX)));
-    //     }
+        for (uint256 i; i < n * m; i++) {
+            data[i / m][i % m] = uint32(bound(data[i / m][i % m], 0, uint256(INT32_MAX)));
+        }
 
-    //     M32x32 A = fromUintEncoded(abi.encode(data));
+        M32x32 A = fromUintEncoded(abi.encode(data));
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         assertEq(A.atIndex(i).toUint(), data[i / m][i % m]);
-    //     }
-    // }
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.atIndex(i).toUint(), data[i / m][i % m]);
+        }
+    }
 
-    // function test_fromUintEncoded_revert_Overflow(uint64[4][4] memory data) public {
-    //     uint256 n = 4;
-    //     uint256 m = 4;
+    function test_fromUintEncoded_revert_Overflow(uint64[4][4] memory data) public {
+        uint256 n = 4;
+        uint256 m = 4;
 
-    //     uint256 max;
+        uint256 max_;
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         if (data[i / m][i % m] > max) max = data[i / m][i % m];
-    //     }
+        for (uint256 i; i < n * m; i++) {
+            if (data[i / m][i % m] > max_) max_ = data[i / m][i % m];
+        }
 
-    //     if (max > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
+        if (max_ > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
 
-    //     M32x32 A = fromUintEncoded(abi.encode(data));
-    // }
+        fromUintEncoded(abi.encode(data));
+    }
 
-    // function test_fromIntEncoded() public {
-    //     M32x32 A = fromIntEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
-    //     M32x32 B = fromIntEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]));
+    function test_fromIntEncoded() public {
+        M32x32 A = fromIntEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
+        M32x32 B = fromIntEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]]));
 
-    //     assertEq(A, range(1, 9));
-    //     assertEq(B, range(1, 10));
-    // }
+        assertEq(A, range(1, 9));
+        assertEq(B, range(1, 10));
+    }
 
-    // function test_fromIntEncoded(int32[4][3] memory data) public {
-    //     uint256 n = 3;
-    //     uint256 m = 4;
+    function test_fromIntEncoded(int32[4][3] memory data) public {
+        uint256 n = 3;
+        uint256 m = 4;
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         data[i / m][i % m] = int32(int256(bound(uint32(data[i / m][i % m]), 0, uint256(UINT32_MAX))));
-    //     }
+        for (uint256 i; i < n * m; i++) {
+            data[i / m][i % m] = int32(int256(bound(uint32(data[i / m][i % m]), 0, uint256(UINT32_MAX))));
+        }
 
-    //     M32x32 A = fromIntEncoded(abi.encode(data));
+        M32x32 A = fromIntEncoded(abi.encode(data));
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         assertEq(A.atIndex(i).toInt(), data[i / m][i % m]);
-    //     }
-    // }
+        for (uint256 i; i < n * m; i++) {
+            assertEq(A.atIndex(i).toInt(), data[i / m][i % m]);
+        }
+    }
 
-    // function test_fromIntEncoded_revert_Overflow(int256[4][4] memory data) public {
-    //     uint256 n = 4;
-    //     uint256 m = 4;
+    function test_fromIntEncoded_revert_Overflow(int256[5][5] memory data) public {
+        uint256 n = 4;
+        uint256 m = 4;
 
-    //     for (uint256 i; i < n * m; i++) {
-    //         int256 a = data[i / m][i % m];
-    //         if (a < type(int32).min || a > type(int32).max) {
-    //             vm.expectRevert(N32x32_Overflow.selector);
-    //             break;
-    //         }
-    //     }
+        for (uint256 i; i < n * m; i++) {
+            int256 a = data[i / m][i % m];
+            if (a < type(int32).min || a > type(int32).max) {
+                vm.expectRevert(N32x32_Overflow.selector);
+                break;
+            }
+        }
 
-    //     M32x32 A = fromIntEncoded(abi.encode(data));
-    // }
+        fromIntEncoded(abi.encode(data));
+    }
 
-    // uint256 constant UINT256_INT64_MAX = uint256(uint64(type(int64).max));
-    // uint256 constant UINT256_INT64_MIN = uint256(uint64(type(int64).min));
+
+    uint256 constant UINT256_INT64_MAX = uint256(uint64(type(int64).max));
+    uint256 constant UINT256_INT64_MIN = uint256(uint64(type(int64).min));
 }
 
 // contract TestGasM32x32 {
