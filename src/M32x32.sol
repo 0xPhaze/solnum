@@ -69,6 +69,7 @@ using {
     mulScalarUncheckedTo_,
     dot,
     dotTransposed,
+    abs,
     T,
     transpose,
     transposeNaive,
@@ -1980,9 +1981,9 @@ function neg(M32x32 A) pure returns (M32x32 C) {
 
 function abs(M32x32 A) pure returns (M32x32 C) {
     unchecked {
-        C = mulScalar(A, NEG_ONE);
-
         (uint256 n, uint256 m, uint256 ptrA) = header(A);
+
+        C = mallocM32x32(n, m); // Allocate memory for matrix.
 
         // Loop over all `n * m` elements of 8 bytes.
         uint256 size = n * m * 8;
@@ -1992,37 +1993,39 @@ function abs(M32x32 A) pure returns (M32x32 C) {
         uint256 rest = size & 31;
         // Obtain a pointer to `C`s data location.
         uint256 ptrC = ref(C);
-        // Keep track of carry bits.
+        // Keep track of overflow.
         bool overflow;
 
         // Loop over 32 byte words.
         while (ptrA != endA) {
             assembly {
-                let a := mload(ptrA) // Load 4 values from `A` at `ptrA`.
+                let cX4 := mload(ptrA) // Load 4 values from `A` at `ptrA`.
 
-                if and(a, INT64_SIGN) {
-                    a := and(a, not(UINT64_MAX))
-                    a := or(a, and(add(not(a), 1), UINT64_MAX))
+                if and(cX4, INT64_SIGN) {
+                    let negated := and(add(not(cX4), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(UINT64_MAX)), negated)
                 }
 
-                // if and(a, INT64_SIGN) {
-                //     a := and(a, not(UINT64_MAX))
-                //     a := or(a, and(add(not(a), 1), UINT64_MAX))
-                // }
+                if and(cX4, shl(64, INT64_SIGN)) {
+                    let negated := and(add(not(shr(64, cX4)), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(shl(64, UINT64_MAX))), shl(64, negated))
+                }
 
-                // c := sar(32, mul(signextend(7, shr(64, a)), s))
-                // carry := or(carry, add(c, INT64_SIGN))
-                // cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+                if and(cX4, shl(128, INT64_SIGN)) {
+                    let negated := and(add(not(shr(128, cX4)), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(shl(128, UINT64_MAX))), shl(128, negated))
+                }
 
-                // c := sar(32, mul(signextend(7, shr(128, a)), s))
-                // carry := or(carry, add(c, INT64_SIGN))
-                // cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+                if and(cX4, shl(192, INT64_SIGN)) {
+                    let negated := and(add(not(shr(192, cX4)), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(shl(192, UINT64_MAX))), shl(192, negated))
+                }
 
-                // c := sar(32, mul(sar(192, a), s))
-                // carry := or(carry, add(c, INT64_SIGN))
-                // cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
-
-                mstore(ptrC, a) // Store packed `cX4` in `ptrC`.
+                mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
             }
 
             // Advance pointers to the next slot.
@@ -2030,36 +2033,37 @@ function abs(M32x32 A) pure returns (M32x32 C) {
             ptrC = ptrC + 32;
         }
 
-        // // Parse the last remaining word.
-        // if (rest != 0) {
-        //     assembly {
-        //         // Mask applies to leftover bits in word.
-        //         let mask := not(shr(mul(rest, 8), not(0)))
-        //         // Load packed values from `A` at `ptrA`.
-        //         let a := and(mload(ptrA), mask)
+        // Parse the last remaining word.
+        if (rest != 0) {
+            assembly {
+                // Mask applies to leftover bits in word.
+                let mask := not(shr(mul(rest, 8), not(0)))
+                // Load 4 values from `A` at `ptrA`.
+                let cX4 := and(mload(ptrA), mask)
 
-        //         // Multiply packed `a` with `s` and keep track of carry.
-        //         let c := sar(32, mul(signextend(7, a), s))
-        //         carry := or(carry, add(c, INT64_SIGN))
-        //         let cX4 := and(c, UINT64_MAX)
+                if and(cX4, shl(64, INT64_SIGN)) {
+                    let negated := and(add(not(shr(64, cX4)), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(shl(64, UINT64_MAX))), shl(64, negated))
+                }
 
-        //         c := sar(32, mul(signextend(7, shr(64, a)), s))
-        //         carry := or(carry, add(c, INT64_SIGN))
-        //         cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+                if and(cX4, shl(128, INT64_SIGN)) {
+                    let negated := and(add(not(shr(128, cX4)), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(shl(128, UINT64_MAX))), shl(128, negated))
+                }
 
-        //         c := sar(32, mul(signextend(7, shr(128, a)), s))
-        //         carry := or(carry, add(c, INT64_SIGN))
-        //         cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+                if and(cX4, shl(192, INT64_SIGN)) {
+                    let negated := and(add(not(shr(192, cX4)), 1), UINT64_MAX)
+                    overflow := or(overflow, eq(negated, INT64_SIGN))
+                    cX4 := or(and(cX4, not(shl(192, UINT64_MAX))), shl(192, negated))
+                }
 
-        //         c := sar(32, mul(sar(192, a), s))
-        //         carry := or(carry, add(c, INT64_SIGN))
-        //         cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+                mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
+            }
+        }
 
-        //         mstore(ptrC, cX4) // Store packed `cX4` in `ptrC`.
-        //     }
-        // }
-
-        // if (carry > UINT64_MAX) revert __N32x32.N32x32_Overflow();
+        if (overflow) revert __N32x32.N32x32_Overflow();
     }
 }
 
@@ -2722,7 +2726,6 @@ function fromIntPtrTo_(uint256 ptr, M32x32 C) pure {
         if (carry > UINT32_MAX) revert __N32x32.N32x32_Overflow();
     }
 }
-
 
 function fromIntArray(int256[][] memory data) pure returns (M32x32 C) {
     unchecked {

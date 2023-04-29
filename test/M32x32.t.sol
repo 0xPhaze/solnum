@@ -40,9 +40,8 @@ contract TestM32x32 is TestHelper {
         m = bound(m, 0, 10);
 
         uint256 memPtr = freeMemPtr();
-        uint256 size = n * m * 8;
+        // uint256 size = n * m * 8;
         // uint256 msize = (size + 31) & 31;
-
         // expectSafeMemoryIncrease(msize + 32);
 
         M32x32 A = zeros(n, m);
@@ -165,8 +164,8 @@ contract TestM32x32 is TestHelper {
 
         M32x32 A = range(1, len + 1).reshape(n, m);
 
-        assertEq(A.sum(), N32x32FromUint(len * (len + 1) / 2));
-        assertEq(A.neg().sum(), N32x32FromUint(len * (len + 1) / 2).neg());
+        assertEq(A.sum(), N32x32FromUint((len * (len + 1)) / 2));
+        assertEq(A.neg().sum(), N32x32FromUint((len * (len + 1)) / 2).neg());
     }
 
     function test_mean(uint256 n, uint256 m) public {
@@ -447,9 +446,19 @@ contract TestM32x32 is TestHelper {
         assertEq(c.isPositive() ? C.max() : C.min(), c);
     }
 
-    // function test_abs() public {
-    //     M32x32 A = M32x32FromUintArray([[1, 2, 3], [-1, 1, 1]]);
-    // }
+    function test_abs() public {
+        M32x32 A = fromIntEncoded(abi.encode([[-1, 2, -3], [-1, 1, 1]]));
+        M32x32 B = fromIntEncoded(abi.encode([[-1, 2, 3, 4], [-1, 1, 1, -4]]));
+        M32x32 C = fromIntEncoded(abi.encode([[1, 2, 3, 4], [1, 1, 1, 4]]));
+        C.set(0, 0, N32x32FromInt(type(int32).min));
+
+        assertEq(A.abs(), fromIntEncoded(abi.encode([[1, 2, 3], [1, 1, 1]])));
+        assertEq(B.abs(), fromIntEncoded(abi.encode([[1, 2, 3, 4], [1, 1, 1, 4]])));
+
+        vm.expectRevert(N32x32_Overflow.selector);
+
+        C.abs();
+    }
 
     function test_fill(uint256 n, uint256 m, N32x32 s) public {
         n = bound(n, 0, 10);
@@ -481,6 +490,7 @@ contract TestM32x32 is TestHelper {
         A = zeros(1, n);
         B = zeros(1, n);
         A.set(0, i, a);
+
         B.set(0, i, b);
 
         M32x32 C = A.add(B);
@@ -690,18 +700,6 @@ contract TestM32x32 is TestHelper {
 
     /* ------------- conversions ------------- */
 
-    // function test_fromUintArray() public {
-    //     M32x32 A = fromUintArray([[1, 2, 3, 4], [5, 6, 7, 8]]);
-    //     M32x32 B = fromUintArray([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-
-    //     assertEq(A, range(1, 9).reshape(2, 4));
-    //     assertEq(B, range(1, 10).reshape(3, 3));
-
-    //     vm.expectRevert(N32x32_Overflow.selector);
-
-    //     B = fromUintArray([[uint256(1 << 32), 2, 3], [uint256(4), 5, 6], [uint256(7), 8, 9]]);
-    // }
-
     function test_fromUintArray(uint256 n, uint256 m) public {
         n = bound(n, 1, 3);
         m = bound(m, 1, 10);
@@ -723,8 +721,9 @@ contract TestM32x32 is TestHelper {
         uint256[][] memory array = rangeUintArray(0, n, m);
         array[i / m][i % m] = a;
 
-        // if (a > type(uint64).max) vm.expectRevert(N32x32_Overflow.selector); // Note: good example of bad testing.
-        if (a > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
+        if (a > uint32(type(int32).max)) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
 
         fromUintArray(array);
     }
@@ -750,37 +749,12 @@ contract TestM32x32 is TestHelper {
         int256[][] memory array = rangeIntArray(0, n, m);
         array[i / m][i % m] = a;
 
-        if (a < type(int32).min || a > type(int32).max) vm.expectRevert(N32x32_Overflow.selector);
+        if (a < type(int32).min || a > type(int32).max) {
+            vm.expectRevert(N32x32_Overflow.selector);
+        }
 
         fromIntArray(array);
     }
-
-    function rangeIntArray(int256 start, uint256 n, uint256 m) internal pure returns (int256[][] memory array) {
-        uint256[][] memory array_ = rangeUintArray(uint256(start), n, m);
-
-        assembly {
-            array := array_
-        }
-    }
-
-    function rangeUintArray(uint256 start, uint256 n, uint256 m) internal pure returns (uint256[][] memory array) {
-        array = new uint256[][](n);
-
-
-        for (uint256 i; i < n; i++) {
-            array[i] = new uint256[](m);
-        }
-
-        unchecked {
-            for (uint256 i; i < n * m; i++) {
-                array[i / m][i % m] = start + i;
-            }
-        }
-    }
-
-
-    
-
 
     function test_fromUintEncoded() public {
         M32x32 A = fromUintEncoded(abi.encode([[1, 2, 3, 4], [5, 6, 7, 8]]));
@@ -790,35 +764,30 @@ contract TestM32x32 is TestHelper {
         assertEq(B, range(1, 10));
     }
 
-    function test_fromUintEncoded(uint32[4][3] memory data) public {
-        uint256 n = 3;
-        uint256 m = 4;
+    uint256 constant _n = 5;
+    uint256 constant _m = 7;
 
-        for (uint256 i; i < n * m; i++) {
-            data[i / m][i % m] = uint32(bound(data[i / m][i % m], 0, uint256(INT32_MAX)));
+    function test_fromUintEncoded(uint32[_m][_n] memory data) public {
+        for (uint256 i; i < _n * _m; i++) {
+            data[i / _m][i % _m] = uint32(bound(data[i / _m][i % _m], 0, uint256(INT32_MAX)));
         }
 
         M32x32 A = fromUintEncoded(abi.encode(data));
 
-        for (uint256 i; i < n * m; i++) {
-            assertEq(A.atIndex(i).toUint(), data[i / m][i % m]);
+        for (uint256 i; i < _n * _m; i++) {
+            assertEq(A.atIndex(i).toUint(), data[i / _m][i % _m]);
         }
     }
 
-    function test_fromUintEncoded_revert_Overflow(uint64[4][4] memory data) public {
-        uint256 n = 4;
-        uint256 m = 4;
-
-        uint256 max;
-
-        for (uint256 i; i < n * m; i++) {
-            if (data[i / m][i % m] > max) max = data[i / m][i % m];
+    function test_fromUintEncoded_revert_Overflow(uint64[_m][_n] memory data) public {
+        for (uint256 i; i < _n * _m; i++) {
+            if (data[i / _m][i % _m] > uint32(type(int32).max)) {
+                vm.expectRevert(N32x32_Overflow.selector);
+                break;
+            }
         }
 
-        if (max > uint32(type(int32).max)) vm.expectRevert(N32x32_Overflow.selector);
-
-
-        M32x32 A = fromUintEncoded(abi.encode(data));
+        fromUintEncoded(abi.encode(data));
     }
 
     function test_fromIntEncoded() public {
@@ -829,41 +798,29 @@ contract TestM32x32 is TestHelper {
         assertEq(B, range(1, 10));
     }
 
-    function test_fromIntEncoded(int32[4][3] memory data) public {
-        uint256 n = 3;
-        uint256 m = 4;
-
-        for (uint256 i; i < n * m; i++) {
-            data[i / m][i % m] = int32(int256(bound(uint32(data[i / m][i % m]), 0, uint256(UINT32_MAX))));
+    function test_fromIntEncoded(int32[_m][_n] memory data) public {
+        for (uint256 i; i < _n * _m; i++) {
+            data[i / _m][i % _m] = int32(int256(bound(uint32(data[i / _m][i % _m]), 0, uint256(UINT32_MAX))));
         }
 
         M32x32 A = fromIntEncoded(abi.encode(data));
 
-        for (uint256 i; i < n * m; i++) {
-            assertEq(A.atIndex(i).toInt(), data[i / m][i % m]);
+        for (uint256 i; i < _n * _m; i++) {
+            assertEq(A.atIndex(i).toInt(), data[i / _m][i % _m]);
         }
     }
 
-    function test_fromIntEncoded_revert_Overflow(int256[4][4] memory data) public {
-        uint256 n = 4;
-        uint256 m = 4;
-
-        for (uint256 i; i < n * m; i++) {
-            int256 a = data[i / m][i % m];
+    function test_fromIntEncoded_revert_Overflow(int256[_m][_n] memory data) public {
+        for (uint256 i; i < _n * _m; i++) {
+            int256 a = data[i / _m][i % _m];
             if (a < type(int32).min || a > type(int32).max) {
                 vm.expectRevert(N32x32_Overflow.selector);
                 break;
             }
         }
 
-        M32x32 A = fromIntEncoded(abi.encode(data));
+        fromIntEncoded(abi.encode(data));
     }
-
-
-
-
-    uint256 constant UINT256_INT64_MAX = uint256(uint64(type(int64).max));
-    uint256 constant UINT256_INT64_MIN = uint256(uint64(type(int64).min));
 }
 
 // contract TestGasM32x32 {

@@ -323,6 +323,32 @@ contract TestHelper is Test {
         }
     }
 
+    /* ------------- Array ------------- */
+
+    function rangeIntArray(int256 start, uint256 n, uint256 m) internal pure returns (int256[][] memory array) {
+        uint256[][] memory array_ = rangeUintArray(uint256(start), n, m);
+
+        assembly {
+            array := array_
+        }
+    }
+
+    function rangeUintArray(uint256 start, uint256 n, uint256 m) internal pure returns (uint256[][] memory array) {
+        array = new uint256[][](n);
+
+        for (uint256 i; i < n; i++) {
+            array[i] = new uint256[](m);
+        }
+
+        unchecked {
+            for (uint256 i; i < n * m; i++) {
+                array[i / m][i % m] = start + i;
+            }
+        }
+    }
+
+    /* ------------- Memory ------------- */
+
     function setFreeMemPtr(uint256 loc) internal pure {
         assembly {
             mstore(0x40, loc)
