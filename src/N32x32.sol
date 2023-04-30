@@ -83,7 +83,7 @@ uint256 constant UINT32_MAX = 0xffffffff;
 uint256 constant UINT64_MAX = 0xffffffffffffffff;
 
 uint256 constant MASK_2X4 = 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff;
-uint256 constant INT64_MIN_X4 = 0x8000000000000000800000000000000080000000000000008000000000000000;
+uint256 constant INT64_SIGN_X4 = 0x8000000000000000800000000000000080000000000000008000000000000000;
 
 /* ------------- math operators ------------- */
 

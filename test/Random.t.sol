@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { M32x32 } from "src/M32x32.sol";
+import "src/M32x32.sol" as sn;
 // import { N32x32, ZERO, ONE, HALF } from "src/N32x32.sol";
 // import { Random, seed } from "src/Random.sol";
 import "src/N32x32.sol";
@@ -15,7 +16,8 @@ contract TestRandom is TestHelper {
         n = bound(n, 1, 10);
         m = bound(m, 1, 10);
 
-        Random r = seed(s);
+        Random r;
+        r.setSeed(s);
         M32x32 R = r.rand(n, m);
 
         assertLt(R, ONE);
@@ -38,15 +40,54 @@ contract TestRandom is TestHelper {
         Random r = seed(0);
         M32x32 R = r.randn(1, 10_000);
 
-        logNum("min", R.min());
-        logNum("max", R.max());
-
-        // assertLt(R.abs(), ONE.mulInt(10));
-        // assertGt(R, ZERO);
+        // logNum("min", R.min());
+        // logNum("max", R.max());
 
         assertApproxEqAbs(R.mean(), ZERO, ONE.divInt(100));
         assertApproxEqAbs(R.vari(), ONE, ONE.divInt(100));
     }
+
+    function test_addRandn() public {
+        Random r = seed(0);
+        M32x32 R = r.randn(1, 100);
+
+        r.setSeed(0);
+        M32x32 R2 = r.addRandn(sn.zeros(1, 100), sn.ONE);
+
+        assertEq(R, R2);
+
+        r.setSeed(0);
+        R2 = r.addRandn(sn.zeros(1, 100), sn.NEG_ONE).mulInt(-1).addScalar(N32x32.wrap(-1));
+
+        assertEq(R, R2);
+
+        r.setSeed(0);
+        R2 = r.addRandn(sn.zeros(1, 100), sn.ONE.mulInt(1337));
+
+        assertApproxEqAbs(R.max().mulInt(1337), R2.max(), ONE.divInt(1_000_000));
+        assertApproxEqAbs(R.min().mulInt(1337), R2.min(), ONE.divInt(1_000_000));
+    }
+
+    function test_addRandn_revert_Overflow() public {
+        Random r = seed(0);
+        vm.expectRevert(N32x32_Overflow.selector);
+
+        r.addRandn(sn.zeros(1, 100), sn.ONE);
+    }
+
+    // function test_randn2() public {
+    //     Random r = seed(0);
+    //     M32x32 R = r.randn2(1, 10_000);
+
+    //     logNum("min", R.min());
+    //     logNum("max", R.max());
+
+    //     // assertLt(R.abs(), ONE.mulInt(10));
+    //     // assertGt(R, ZERO);
+
+    //     assertApproxEqAbs(R.mean(), ZERO, ONE.divInt(100));
+    //     assertApproxEqAbs(R.vari(), ONE, ONE.divInt(100));
+    // }
 
     function test_xxx(uint256 randomSeed) public {
         // function test_xxx() public {

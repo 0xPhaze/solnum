@@ -28,7 +28,7 @@ import {
     UINT32_MAX,
     UINT64_MAX,
     MASK_2X4,
-    INT64_MIN_X4,
+    INT64_SIGN_X4,
     INT32_MAX,
     INT64_MAX,
     INT64_SIGN,
@@ -488,7 +488,7 @@ function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
                 mstore(ptrC, c) // Store packed values in `ptrC`.
 
                 // Overflow when signs of `a` and `s` are equal, but differ from `c`.
-                overflow := or(overflow, and(and(not(xor(a, b)), xor(a, c)), INT64_MIN_X4))
+                overflow := or(overflow, and(and(not(xor(a, b)), xor(a, c)), INT64_SIGN_X4))
             }
 
             // Advance pointers to the next slot.
@@ -509,7 +509,7 @@ function addTo_(M32x32 A, M32x32 B, M32x32 C) pure {
                 c := or(c, and(add(and(a, not(MASK_2X4)), and(b, not(MASK_2X4))), not(MASK_2X4)))
 
                 // Overflow when signs of `a` and `s` are equal, but differ from `c`.
-                overflow := or(overflow, and(and(not(xor(a, b)), xor(a, c)), INT64_MIN_X4))
+                overflow := or(overflow, and(and(not(xor(a, b)), xor(a, c)), INT64_SIGN_X4))
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
             }
@@ -1239,7 +1239,7 @@ function addScalarTo_(M32x32 A, N32x32 s, M32x32 C) pure {
                 c := or(c, and(add(and(a, not(MASK_2X4)), and(sX4, not(MASK_2X4))), not(MASK_2X4)))
 
                 // Overflow when signs of `a` and `s` are equal, but differ from `c`.
-                overflow := or(overflow, and(and(not(xor(a, sX4)), xor(a, c)), INT64_MIN_X4))
+                overflow := or(overflow, and(and(not(xor(a, sX4)), xor(a, c)), INT64_SIGN_X4))
 
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
             }
@@ -1265,7 +1265,7 @@ function addScalarTo_(M32x32 A, N32x32 s, M32x32 C) pure {
                 mstore(ptrC, c) // Store packed `c` in `ptrC`.
 
                 // Overflow when signs of `a` and `s` are equal, but differ from `c`.
-                overflow := or(overflow, and(and(not(xor(a, sX4)), xor(a, c)), INT64_MIN_X4))
+                overflow := or(overflow, and(and(not(xor(a, sX4)), xor(a, c)), INT64_SIGN_X4))
             }
         }
 

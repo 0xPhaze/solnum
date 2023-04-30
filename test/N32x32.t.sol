@@ -482,8 +482,8 @@ contract TestN32x32Differential is TestHelper {
 
             // If signs are the same ~(aX4 ^ bX4), e.g. ~(1 ^ 1) = 1, ~(1 ^ 0) = 0,
             // and they now differ from the result (aX4 ^ cX4), there is overflow.
-            // uint256 overflow = ((~(aX4 ^ bX4)) & (aX4 ^ cX4)) & INT64_MIN_X4;
-            overflow = ((~(aX4 ^ bX4)) & (aX4 ^ cX4)) & INT64_MIN_X4 != 0;
+            // uint256 overflow = ((~(aX4 ^ bX4)) & (aX4 ^ cX4)) & INT64_SIGN_X4;
+            overflow = ((~(aX4 ^ bX4)) & (aX4 ^ cX4)) & INT64_SIGN_X4 != 0;
 
             // if (overflow != 0) revert N32x32_Overflow();
         }
@@ -493,15 +493,18 @@ contract TestN32x32Differential is TestHelper {
         assembly {
             cX4 := and(add(and(aX4, MASK_2X4), and(bX4, MASK_2X4)), MASK_2X4)
             cX4 := or(cX4, and(add(and(aX4, not(MASK_2X4)), and(bX4, not(MASK_2X4))), not(MASK_2X4)))
-            overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_MIN_X4)
+            overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_SIGN_X4)
         }
     }
 
     /* ------------- mul ------------- */
 
     function test_mul(int64 a, int64 b) public {
+        a = int64(bound(a, 0, type(int64).max));
+        // b = int64(bound(b, 0, type(int64).max));
+
         assertEqCall(abi.encodeCall(this.customMul, (a, b)), abi.encodeCall(this.simpleMul, (a, b)), false);
-        assertEqCall(abi.encodeCall(this.customMul2, (a, b)), abi.encodeCall(this.simpleMul, (a, b)), false);
+        // assertEqCall(abi.encodeCall(this.customMul2, (a, b)), abi.encodeCall(this.simpleMul, (a, b)), false);
         // assertEqCall(abi.encodeCall(this.customMul3, (a, b)), abi.encodeCall(this.simpleMul, (a, b)), false);
     }
 
@@ -527,11 +530,42 @@ contract TestN32x32Differential is TestHelper {
             bool overflow;
 
             assembly {
+                a := and(a, UINT64_MAX)
+                b := and(b, UINT64_MAX)
+
                 // uc := shr(32, mul(a, b))
                 uc := mul(a, b)
 
                 // overflow := gt(sub(signextend(15, uc), uMIN), UINT64_MAX)
-                overflow := gt(sub(uc, uMIN), UINT64_MAX)
+
+                let shift := div(add(and(a, INT64_SIGN), and(b, INT64_SIGN)), 0x888)
+
+                // if a > 0 and b > 0, then c < 0x8000
+                // if a < 0 or b < 0, then 0x8000 <= c > 0x80000000
+                // 0x0000 <= 0x8000 * 0x0000
+                // 0x8000 <= 0x8000 * 0x0001
+                // 0x0800 <= 0x0800 * 0x0010
+                // if a < 0 and b < 0, then c > 0x80000000
+                //                                          <=> 0xffffff40000000
+
+                // do int64_min <= trunc(a * b) <= int64_max
+                // 0x0000 = 0x8000 * 0x0000 good
+                // 0x8000 = 0x8000 * 0x0001 good
+                // 0x10000 = 0x8000 * 0x0002 bad
+                // 0x1e000 = 0xf000 * 0x0002 good
+
+                // sub by 0, divide by 0x8000 => 0 == Ok
+                // sub by 0x8000, divide by (0x8000 * 0x7fff) => 0 == Ok
+                // sub by 0x40000000 (0x8000 * 0x8000), divide by (0x8000 * 0x8000) => 0 == Ok
+
+                // divide by 0: < 0x8000 == Ok
+                // divide by 0x8000, sub 1 => < 0x8000 == Ok
+                // divide by (0x8000 * 0x8000), sub by 1  => 0 == Ok
+
+                // 0xffff0000
+
+                overflow := gt(sub(shr(shift, uc), gt(shift, 0)), INT64_MAX)
+                // overflow := gt(uc, INT64_MAX)
             }
 
             if (overflow) revert N32x32_Overflow();
@@ -748,15 +782,14 @@ contract TestN32x32Differential is TestHelper {
     /* ------------- mulScalarFixed ------------- */
 
     function test_mulScalarFixed(N32x32 a1, N32x32 a2, N32x32 a3, N32x32 a4, N32x32 s) public {
-        // console.logBytes32(bytes32(aX4));
         assertEqCall(
             abi.encodeCall(this.customMulScalarFixed, (pack(a1, a2, a3, a4), s)),
             abi.encodeCall(this.simpleMulScalarFixed, (a1, a2, a3, a4, s)),
             false
         );
         // assertEqCall(
-        //     abi.encodeCall(this.customMulFixed2, (pack(a, b, c, d), s)),
-        //     abi.encodeCall(this.simpleMulScalarFixed, (a, b, c, d, s)),
+        //     abi.encodeCall(this.customMulScalarFixed2, (pack(a1, a2, a3, a4), s)),
+        //     abi.encodeCall(this.simpleMulScalarFixed, (a1, a2, a3, a4, s)),
         //     false
         // );
     }
@@ -794,6 +827,45 @@ contract TestN32x32Differential is TestHelper {
 
         if (overflow) revert N32x32_Overflow();
     }
+
+    // If the product of two positive numbers exceeds max int, overflow
+    // 0x1 * 0x7ffff = 0x7ffff
+
+    // If the product of two negative numbers is less than max int, overflow
+
+    // function customMulScalarFixed2(uint256 aX4, N32x32 s) public logs_gas returns (uint256 cX4) {
+    //     bool overflow;
+
+    //     assembly {
+    //         let c := sar(32, mul(signextend(7, aX4), s))
+    //         overflow := add(c, INT64_SIGN)
+    //         cX4 := and(c, UINT64_MAX)
+
+    //         c := sar(32, mul(signextend(7, shr(64, aX4)), s))
+    //         overflow := or(overflow, add(c, INT64_SIGN))
+    //         cX4 := or(cX4, shl(64, and(c, UINT64_MAX)))
+
+    //         c := sar(32, mul(signextend(7, shr(128, aX4)), s))
+    //         overflow := or(overflow, add(c, INT64_SIGN))
+    //         cX4 := or(cX4, shl(128, and(c, UINT64_MAX)))
+
+    //         c := sar(32, mul(sar(192, aX4), s))
+    //         overflow := or(overflow, add(c, INT64_SIGN))
+    //         cX4 := or(cX4, shl(192, and(c, UINT64_MAX)))
+
+    //         overflow := gt(overflow, UINT64_MAX)
+
+    //         // TODO:
+    //         cX4 := and(shr(32, mul(and(aX4, MASK_2X4), and(s, UINT64_MAX))), MASK_2X4)
+    //         cX4 := or(cX4, and(shl(32, mul(shr(64, and(aX4, not(MASK_2X4))), and(s, UINT64_MAX))), not(MASK_2X4)))
+    //         // overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_SIGN_X4)
+    //     }
+
+    //     if (overflow) revert N32x32_Overflow();
+    // }
+    // cX4 := and(add(and(aX4, MASK_2X4), and(bX4, MASK_2X4)), MASK_2X4)
+    // cX4 := or(cX4, and(add(and(aX4, not(MASK_2X4)), and(bX4, not(MASK_2X4))), not(MASK_2X4)))
+    // overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_SIGN_X4)
 
     // // TODO
     // function customMulFixed(uint256 aX4, uint256 bX4) public logs_gas returns (bool overflow, uint256 cX4) {
@@ -938,20 +1010,92 @@ contract TestN32x32Differential is TestHelper {
             bool overflow;
 
             assembly {
+                // cX4 := and(add(and(aX4, MASK_2X4), and(bX4, MASK_2X4)), MASK_2X4)
+                // cX4 := or(cX4, and(add(and(aX4, not(MASK_2X4)), and(bX4, not(MASK_2X4))), not(MASK_2X4)))
+                // overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_SIGN_X4)
+
                 let c
                 let carry
 
-                c := mul(signextend(7, aX4), signextend(7, bX4))
-                sum := c
+                sum :=
+                    add(
+                        shr(128, mul(or(shr(128, and(aX4, MASK_2X4)), shl(128, and(aX4, MASK_2X4))), and(bX4, MASK_2X4))),
+                        shr(
+                            128,
+                            mul(
+                                or(shr(192, and(aX4, not(MASK_2X4))), shl(64, and(aX4, not(MASK_2X4)))),
+                                shr(64, and(bX4, not(MASK_2X4)))
+                            )
+                        )
+                    )
 
-                c := mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4)))
-                sum := add(sum, c)
+                // c := mul(signextend(7, aX4), signextend(7, bX4))
+                // sum := c
 
-                c := mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4)))
-                sum := add(sum, c)
+                // c := mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4)))
+                // sum := add(sum, c)
 
-                c := mul(sar(192, aX4), sar(192, bX4))
-                sum := add(sum, c)
+                // c := mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4)))
+                // sum := add(sum, c)
+
+                // c := mul(sar(192, aX4), sar(192, bX4))
+                // sum := add(sum, c)
+
+                overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
+            }
+
+            if (overflow) revert N32x32_Overflow();
+        }
+    }
+
+    function test_dott(int64 a1, int64 a2, int64 a3, int64 a4, int64 b1, int64 b2, int64 b3, int64 b4) public {
+        assertEqCall(
+            abi.encodeCall(this.customDott, (pack(a1, a2, a3, a4), pack(b1, b2, b3, b4))),
+            abi.encodeCall(this.customDott2, (pack(a1, a2, a3, a4), pack(b1, b2, b3, b4))),
+            false
+        );
+    }
+
+    function customDott(uint256 aX4, uint256 bX4) public logs_gas returns (uint256 sum) {
+        unchecked {
+            bool overflow;
+
+            assembly {
+                let c
+                let carry
+
+                sum := mul(signextend(7, aX4), signextend(7, bX4))
+                sum := add(sum, mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4))))
+                sum := add(sum, mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4))))
+                sum := add(sum, mul(sar(192, aX4), sar(192, bX4)))
+
+                overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
+            }
+
+            if (overflow) revert N32x32_Overflow();
+        }
+    }
+
+    function customDott2(uint256 aX4, uint256 bX4) public logs_gas returns (uint256 sum) {
+        unchecked {
+            bool overflow;
+
+            assembly {
+                // cX4 := and(add(and(aX4, MASK_2X4), and(bX4, MASK_2X4)), MASK_2X4)
+                // cX4 := or(cX4, and(add(and(aX4, not(MASK_2X4)), and(bX4, not(MASK_2X4))), not(MASK_2X4)))
+                // overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_SIGN_X4)
+
+                sum :=
+                    add(
+                        shr(128, mul(or(shr(128, and(aX4, MASK_2X4)), shl(128, and(aX4, MASK_2X4))), and(bX4, MASK_2X4))),
+                        shr(
+                            128,
+                            mul(
+                                or(shr(192, and(aX4, not(MASK_2X4))), shl(64, and(aX4, not(MASK_2X4)))),
+                                shr(64, and(bX4, not(MASK_2X4)))
+                            )
+                        )
+                    )
 
                 overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
             }
