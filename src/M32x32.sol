@@ -2683,6 +2683,20 @@ function bytes_(M32x32 A) pure returns (bytes memory dataBytes) {
     }
 }
 
+function fromM32x32Bytes_(bytes memory dataBytes) pure returns (M32x32 C) {
+    unchecked {
+        uint256 m = dataBytes.length / 8;
+
+        uint256 ptr;
+
+        assembly {
+            ptr := add(32, dataBytes) // Actual data is located after length encoding.
+        }
+
+        C = M32x32Header(ptr, 1, m);
+    }
+}
+
 function fromUintArray(uint256[][] memory data) pure returns (M32x32 C) {
     unchecked {
         uint256 n = data.length;
