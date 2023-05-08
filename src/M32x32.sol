@@ -48,7 +48,7 @@ using {
     sizeBytes,
     ref,
     reshape,
-    // bytes_,
+    bytes_,
     copy,
     at,
     atIndex,
@@ -2673,16 +2673,15 @@ function copy(M32x32 A) view returns (M32x32 C) {
 //     }
 // }
 
-// function bytes_(M32x32 A) pure returns (bytes memory dataBytes) {
-//     uint256 ptr = ref(A);
+function bytes_(M32x32 A) pure returns (bytes memory dataBytes) {
+    uint256 ptr = ref(A);
 
-//     assembly {
-//         // This only works under the assumption that
-//         // we always store the size in bytes before the data.
-//         dataBytes := sub(ptr, 32)
-//     }
-// }
-// fromUint256Ptr
+    assembly {
+        // This only works under the assumption that
+        // we always store the size in bytes before the data.
+        dataBytes := sub(ptr, 32)
+    }
+}
 
 function fromUintArray(uint256[][] memory data) pure returns (M32x32 C) {
     unchecked {
