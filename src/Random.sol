@@ -6,7 +6,7 @@ import "./M32x32.sol" as M32x32Lib;
 
 import { UM256, mallocUM256 } from "./UM256.sol";
 import { M32x32, mallocM32x32, UINT32_MAX } from "./M32x32.sol";
-import { UINT64_MAX, N32x32 } from "./N32x32.sol";
+import { UINT64_MAX, INT64_SIGN, N32x32, N32x32_Overflow } from "./N32x32.sol";
 
 type Random is uint256;
 
@@ -240,8 +240,14 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
         // Loop over all `n * m` elements of 8 bytes.
         uint256 end = ptr + ((n * m * 8 + 31) & ~uint256(31));
 
+        if ((n * m * 8) & uint256(31) != 0) {
+            revert("todo");
+        }
+
         // Update random seed when iterating over elements.
         uint256 randomSeed;
+        // Keep track of overflow.
+        uint256 carry;
 
         // Pre-compute multiplier.
         uint256 multiplier;
@@ -252,6 +258,7 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
         while (ptr != end) {
             assembly {
                 let rn, rX4
+                let a
 
                 let aX4 := mload(ptr)
 
@@ -267,7 +274,9 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
                 rn := mul(rn, multiplier) // Multiply by `scale * sqrt(N / variance) = scale * sqrt(8 * 12) << 32`.
                 rn := sar(67, rn) // Shift back by 64 bits. Take average: Divide by `N = 8`.
 
-                rX4 := and(rn, UINT64_MAX)
+                a := add(signextend(7, aX4), rn) // Add `a` and random number.
+                rX4 := and(a, UINT64_MAX) // Pack number.
+                carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
@@ -276,7 +285,9 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
                 rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
                 rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
 
-                rX4 := or(rX4, shl(64, and(rn, UINT64_MAX)))
+                a := add(signextend(7, shr(64, aX4)), rn) // Add `a` and random number.
+                rX4 := or(rX4, shl(64, and(a, UINT64_MAX))) // Pack number.
+                carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
@@ -285,7 +296,9 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
                 rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
                 rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
 
-                rX4 := or(rX4, shl(128, and(rn, UINT64_MAX)))
+                a := add(signextend(7, shr(128, aX4)), rn) // Add `a` and random number.
+                rX4 := or(rX4, shl(128, and(a, UINT64_MAX))) // Pack number.
+                carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
@@ -294,16 +307,22 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
                 rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
                 rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
 
-                rX4 := or(rX4, shl(192, rn))
+                a := add(sar(192, aX4), rn) // Add `a` and random number.
+                rX4 := or(rX4, shl(192, and(a, UINT64_MAX))) // Pack number.
+                carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                mstore(ptr, rX4)
+                mstore(ptr, rX4) // Store packed variable at `ptr`.
             }
 
             ptr = ptr + 32;
         }
+
+        // TODO: Adapt overflow for non-multiples of 4.
+
+        if (carry > UINT64_MAX) revert N32x32_Overflow();
     }
 }
 

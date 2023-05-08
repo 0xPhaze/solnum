@@ -62,17 +62,18 @@ contract TestRandom is TestHelper {
         assertEq(R, R2);
 
         r.setSeed(0);
-        R2 = r.addRandn(sn.zeros(1, 100), sn.ONE.mulInt(1337));
+        N32x32 shift = N32x32.wrap(0x1234fffffffff);
+        R2 = r.addRandn(sn.full(1, 100, shift), sn.ONE.mulInt(1337)).addScalar(shift.mulInt(-1));
 
-        assertApproxEqAbs(R.max().mulInt(1337), R2.max(), ONE.divInt(1_000_000));
-        assertApproxEqAbs(R.min().mulInt(1337), R2.min(), ONE.divInt(1_000_000));
+        assertApproxEqAbs(R.max(), R2.max().divInt(1337), ONE.divInt(1_000_000));
+        assertApproxEqAbs(R.min(), R2.min().divInt(1337), ONE.divInt(1_000_000));
     }
 
     function test_addRandn_revert_Overflow() public {
         Random r = seed(0);
         vm.expectRevert(N32x32_Overflow.selector);
 
-        r.addRandn(sn.zeros(1, 100), sn.ONE);
+        r.addRandn(sn.full(1, 100, sn.MAX.sub(sn.ONE)), sn.ONE);
     }
 
     // function test_randn2() public {

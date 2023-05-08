@@ -35,8 +35,8 @@ contract TestHelper is Test {
     function assertEq(N32x32 a, N32x32 b) internal {
         if (N32x32.unwrap(a) != N32x32.unwrap(b)) {
             emit log("Error: a = b not satisfied [N32x32]");
-            emit log_named_string("  Expected", toString(b));
-            emit log_named_string("    Actual", toString(a));
+            emit log_named_string("      Left", toString(a));
+            emit log_named_string("     Right", toString(b));
             fail();
         }
     }
@@ -176,9 +176,9 @@ contract TestHelper is Test {
     function assertEq(UM256 A, uint256 s) internal {
         if (!A.eqAllScalar(s)) {
             emit log("Error: A == s not satisfied [UM256]");
-            emit log_named_uint("  Expected", s);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log_named_uint("     Right", s);
             fail();
         }
     }
@@ -186,9 +186,9 @@ contract TestHelper is Test {
     function assertLt(UM256 A, uint256 s) internal {
         if (!A.ltAllScalar(s)) {
             emit log("Error: A < s not satisfied [UM256]");
-            emit log_named_uint("  Expected", s);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log_named_uint("     Right", s);
             fail();
         }
     }
@@ -196,9 +196,9 @@ contract TestHelper is Test {
     function assertGt(UM256 A, uint256 s) internal {
         if (!A.ltAllScalar(s)) {
             emit log("Error: A > s not satisfied [UM256]");
-            emit log_named_uint("  Expected", s);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log_named_uint("     Right", s);
             fail();
         }
     }
@@ -206,10 +206,10 @@ contract TestHelper is Test {
     function assertEq(UM256 A, UM256 B) internal {
         if (!A.eqAll(B)) {
             emit log("Error: A == B not satisfied [UM256]");
-            emit log("  Expected:");
-            logMat(B);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log("     Right:");
+            logMat(B);
             fail();
         }
     }
@@ -237,9 +237,9 @@ contract TestHelper is Test {
     function assertLt(M32x32 A, N32x32 s) internal {
         if (!A.ltAllScalar(s)) {
             emit log("Error: A < s not satisfied [M32x32]");
-            emit log_named_string("  Expected", toString(s));
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log_named_string("     Right", toString(s));
             fail();
         }
     }
@@ -247,9 +247,9 @@ contract TestHelper is Test {
     function assertGt(M32x32 A, N32x32 s) internal {
         if (!A.gtAllScalar(s)) {
             emit log("Error: A > s not satisfied [M32x32]");
-            emit log_named_string("  Expected", toString(s));
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log_named_string("     Right", toString(s));
             fail();
         }
     }
@@ -257,9 +257,9 @@ contract TestHelper is Test {
     function assertEq(M32x32 A, uint256 s) internal {
         if (!A.eqAllScalar(N32x32.wrap(int64(int256(s))))) {
             emit log("Error: A == s not satisfied [M32x32]");
-            emit log_named_uint("  Expected", s);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log_named_uint("     Right", s);
             fail();
         }
     }
@@ -267,9 +267,9 @@ contract TestHelper is Test {
     // function assertLt(M32x32 A, N32x32 s) internal {
     //     if (!A.ltAllScalar(s)) {
     //         emit log("Error: A < s not satisfied [M32x32]");
-    //         emit log_named_uint("  Expected", s);
-    //         emit log("    Actual:");
+    //         emit log("      Left:");
     //         logMat(A);
+    //         emit log_named_uint("     Right", s);
     //         fail();
     //     }
     // }
@@ -277,9 +277,9 @@ contract TestHelper is Test {
     // function assertGt(M32x32 A, N32x32 s) internal {
     //     if (!A.gtAllScalar(s)) {
     //         emit log("Error: A > s not satisfied [M32x32]");
-    //         emit log_named_uint("  Expected", s);
-    //         emit log("    Actual:");
+    //         emit log("      Left:");
     //         logMat(A);
+    //         emit log_named_uint("     Right", s);
     //         fail();
     //     }
     // }
@@ -287,9 +287,9 @@ contract TestHelper is Test {
     function assertEq(M32x32 A, N32x32 s) internal {
         if (!A.eqAllScalar(s)) {
             emit log("Error: A == s not satisfied [M32x32]");
-            logNum("  Expected", s);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            logNum("     Right", s);
             fail();
         }
     }
@@ -297,10 +297,10 @@ contract TestHelper is Test {
     function assertEq(M32x32 A, M32x32 B) internal {
         if (!A.eqAll(B)) {
             emit log("Error: A == B not satisfied [M32x32]");
-            emit log("  Expected:");
-            logMat(B);
-            emit log("    Actual:");
+            emit log("      Left:");
             logMat(A);
+            emit log("     Right:");
+            logMat(B);
             fail();
         }
     }

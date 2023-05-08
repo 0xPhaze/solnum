@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "src/M32x32.sol";
 import "src/N32x32.sol";
+import "src/Random.sol";
 import "./utils/TestHelper.sol";
 
 contract TestM32x32 is TestHelper {
@@ -460,6 +461,26 @@ contract TestM32x32 is TestHelper {
         C.abs();
     }
 
+    function test_positive() public {
+        M32x32 A = fromIntEncoded(abi.encode([[-1, 2, -3], [-1, 1, 1]]));
+        M32x32 B = fromIntEncoded(abi.encode([[-1, 2, 3, 4], [-1, 1, 1, -4]]));
+        M32x32 C = fromIntEncoded(abi.encode([[1, 2, 3, 4], [1, 1, 1, 4]]));
+
+        C.set(0, 0, N32x32FromInt(type(int32).min));
+
+        assertEq(A.positive(), fromIntEncoded(abi.encode([[0, 2, 0], [0, 1, 1]])));
+        assertEq(B.positive(), fromIntEncoded(abi.encode([[0, 2, 3, 4], [0, 1, 1, 0]])));
+    }
+
+    function test_linearReluTransposed() public {
+        Random r = seed(0);
+        M32x32 A = zeros(6, 5);
+        M32x32 B = r.randn(4, 5);
+        M32x32 bias = r.randn(1, 4);
+
+        assertEq(A.dotTransposed(B).addBroadcast(bias).positive(), A.linearReluTransposed(B, bias));
+    }
+
     function test_fill(uint256 n, uint256 m, N32x32 s) public {
         n = bound(n, 0, 10);
         m = bound(m, 0, 10);
@@ -473,29 +494,58 @@ contract TestM32x32 is TestHelper {
     /* ------------- Mat x Mat -> Mat operators ------------- */
 
     // TODO add random tests: (a + a) = 2a
+    function test_add() public {
+        test_add(4, 3, ONE, MAX);
+    }
+
     function test_add(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
         n = bound(n, 1, 20);
         i = bound(i, 0, n - 1);
 
-        // Test on a full matrix.
-        M32x32 A = full(1, n, a);
-        M32x32 B = full(1, n, b);
-
         (bool success, N32x32 c) = a.tryAdd(b);
         if (!success) vm.expectRevert(N32x32_Overflow.selector);
 
-        assertEq(A.add(B), c);
-
         // Test on a sparse matrix.
-        A = zeros(1, n);
-        B = zeros(1, n);
-        A.set(0, i, a);
+        M32x32 A = zeros(1, n);
+        M32x32 B = zeros(1, n);
 
+        A.set(0, i, a);
         B.set(0, i, b);
+
+        // logMat("A", A);
+        // logMat("B", B);
 
         M32x32 C = A.add(B);
 
+        // logMat("C", C);
+
         assertEq(c.isPositive() ? C.max() : C.min(), c);
+
+        // Test on a full matrix.
+        A = full(1, n, a);
+        B = full(1, n, b);
+
+        assertEq(A.add(B), c);
+        // logMat("C", A.add(B));
+    }
+
+    function test_addBroadcast() public {
+        // M32x32 A = fromUintEncoded(abi.encode([[1, 2, 3], [4, 5, 6], [7, 8, 9]])).reshape(3, 3);
+        // M32x32 B = fromUintEncoded(abi.encode([1, 2, 3])).reshape(1, 3);
+        // M32x32 C = fromUintEncoded(abi.encode([[2, 4, 6], [5, 7, 9], [8, 10, 12]])).reshape(3, 3);
+
+        M32x32 A = fromUintEncoded(abi.encode([[1, 2, 3, 4], [4, 5, 6, 7], [7, 8, 9, 10]])).reshape(3, 4);
+        M32x32 B = fromUintEncoded(abi.encode([1, 2, 3, 4])).reshape(1, 4);
+        M32x32 C = fromUintEncoded(abi.encode([[2, 4, 6, 8], [5, 7, 9, 11], [8, 10, 12, 14]])).reshape(3, 4);
+
+        // B = fromUintEncoded(abi.encode([1, 2, 3])).reshape(3, 1);
+        // C = fromUintEncoded(abi.encode([[2, 3, 4, 5], [6, 7, 8, 9], [10, 11, 12, 13]])).reshape(3, 4);
+
+        // logMat("A", A);
+        // logMat("B", B);
+        // logMat("C", C);
+
+        assertEq(A.addBroadcast(B), C);
     }
 
     function test_addUnchecked(uint256 n, uint256 i, N32x32 a, N32x32 b) public {
