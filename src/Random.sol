@@ -222,23 +222,22 @@ function randn(Random r, uint256 n, uint256 m) pure returns (M32x32 A) {
     }
 }
 
-function addRandn(Random r, M32x32 A, N32x32 scale) view returns (M32x32 C) {
-    C = A.copy();
+function addRandn(Random r, M32x32 A, N32x32 scale) pure returns (M32x32 C) {
+    C = A.mallocLike();
 
-    addRandnTo_(r, C, scale);
+    addRandnTo_(r, A, C, scale);
 }
 
-function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
+function addRandnTo_(Random r, M32x32 A, M32x32 B, N32x32 scale) pure {
     unchecked {
-        uint256 n;
-        uint256 m;
-        uint256 ptr;
-
         // Obtain a pointer to matrix data location.
-        (n, m, ptr) = A.header();
+        (uint256 n, uint256 m, uint256 ptrA) = A.header();
+        (uint256 nB, uint256 mB, uint256 ptrB) = B.header();
+
+        if (n != nB || m != mB) revert("M32x32_InvalidDimensions");
 
         // Loop over all `n * m` elements of 8 bytes.
-        uint256 end = ptr + ((n * m * 8 + 31) & ~uint256(31));
+        uint256 end = ptrA + ((n * m * 8 + 31) & ~uint256(31));
 
         if ((n * m * 8) & uint256(31) != 0) {
             revert("todo");
@@ -255,12 +254,12 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
             multiplier := mul(scale, 42081913348) // Multiply scale by `sqrt(N / variance) = sqrt(8 * 12) << 32`.
         }
 
-        while (ptr != end) {
+        while (ptrA != end) {
             assembly {
                 let rn, rX4
                 let a
 
-                let aX4 := mload(ptr)
+                let aX4 := mload(ptrA)
 
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
@@ -314,10 +313,11 @@ function addRandnTo_(Random r, M32x32 A, N32x32 scale) pure {
                 randomSeed := keccak256(r, 32) // Generate a new random number.
                 mstore(r, randomSeed) // Store the updated random seed in `r`.
 
-                mstore(ptr, rX4) // Store packed variable at `ptr`.
+                mstore(ptrB, rX4) // Store packed variable at `ptrB`.
             }
 
-            ptr = ptr + 32;
+            ptrA = ptrA + 32;
+            ptrB = ptrB + 32;
         }
 
         // TODO: Adapt overflow for non-multiples of 4.

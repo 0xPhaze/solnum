@@ -56,6 +56,7 @@ using {
     setUnsafe,
     setIndex,
     fill_,
+    mallocLike,
     add,
     addUnchecked,
     addScalar,
@@ -173,6 +174,12 @@ function ref(M32x32 A) pure returns (uint256 ptr) {
 }
 
 /* ------------- constructors ------------- */
+
+function mallocLike(M32x32 A) pure returns (M32x32 C) {
+    (uint256 n, uint256 m) = shape(A);
+
+    C = mallocM32x32(n, m);
+}
 
 function mallocM32x32(uint256 n, uint256 m) pure returns (M32x32 A) {
     unchecked {
@@ -1064,7 +1071,7 @@ function dotTransposed(M32x32 A, M32x32 B) pure returns (M32x32 C) {
     }
 }
 
-/// @dev Computes `C_ij = A_ik B_jk + b_1j`
+/// @dev Computes `C_ij = max(A_ik B_jk + b_1j, 0)`
 function linearReluTransposed(M32x32 A, M32x32 B, M32x32 bias) pure returns (M32x32 C) {
     unchecked {
         (uint256 nA, uint256 mA, uint256 refA) = header(A);
@@ -1150,6 +1157,113 @@ function linearReluTransposed(M32x32 A, M32x32 B, M32x32 bias) pure returns (M32
                     c := mul(c, sgt(c, 0)) // Add relu gate.
 
                     overflow := or(overflow, c) // Keep track of overflow.
+                }
+
+                assembly {
+                    // TODO reverse order
+                    // Preserve the previous data in memory.
+                    let word := and(mload(ptrC), not(UINT64_MAX))
+
+                    mstore(ptrC, or(word, and(c, UINT64_MAX))) // Store the result in C[i,j].
+                }
+
+                ptrC = ptrC + 8; // Advance to the next element of `C`.
+                ptrBias = ptrBias + 8; // Advance to the next column → of `Bias`.
+                ptrBRow = ptrBRow + rowSizeB; // Advance to the next row ↓ of `B`.
+            }
+
+            ptrARow = ptrARow + rowSizeA; // Advance to the next row ↓ of `A`.
+        }
+
+        if (overflow > uint256(INT64_MAX)) revert __N32x32.N32x32_Overflow();
+    }
+}
+
+/// @dev Computes `C_ij = A_ik B_jk + b_1j`
+function linearTransposed(M32x32 A, M32x32 B, M32x32 bias) pure returns (M32x32 C) {
+    unchecked {
+        (uint256 nA, uint256 mA, uint256 refA) = header(A);
+        (uint256 nB, uint256 mB, uint256 refB) = header(B);
+        (uint256 nb, uint256 mb, uint256 refb) = header(bias);
+
+        if (mA != mB || nB != mb || nb != 1) revert M32x32_IncompatibleDimensions();
+
+        C = mallocM32x32(nA, nB);
+
+        // Offset pointer by 3 (of 4) 8 byte chunks.
+        // This way the loaded values will be right-aligned.
+        uint256 ptrC = ref(C) - 24;
+        refb = refb - 24;
+
+        uint256 rowSizeA = 8 * mA;
+        uint256 rowSizeB = 8 * mB;
+
+        uint256 ptrARowEnd = refA + 8 * nA * mA;
+        uint256 ptrARow = refA; // Updates by row size of `A` in i-loop.
+
+        uint256 ptrBRowEnd = refB + 8 * nB * mB;
+        uint256 ptrBRow;
+
+        // Keep track of overflow
+        uint256 overflow;
+
+        uint256 c;
+
+        // Loop over `A`s rows ↓.
+        while (ptrARow != ptrARowEnd) {
+            ptrBRow = refB;
+
+            uint256 ptrBias = refb; // Bias resets for every new sample.
+
+            // Loop over `B`s rows ↓.
+            while (ptrBRow != ptrBRowEnd) {
+                uint256 ptrA = ptrARow;
+                uint256 ptrB = ptrBRow;
+                // End inner loop after one row of `A`.
+                // Up until here we can load & parse full words (4 elements).
+                uint256 ptrAEnd = ptrARow + (rowSizeA & ~uint256(31));
+                // The rest needs to be parsed individually.
+                uint256 ptrARest = rowSizeA & 31;
+                // Perform the dot product on the current
+                // row vector in `A` and the row vector `B`.
+                // Store the result in `c`.
+                c = 0;
+
+                // Loop over `A`s cols → and `B`s cols → in strides of 4.
+                while (ptrA != ptrAEnd) {
+                    assembly {
+                        let aX4 := mload(ptrA) // Load packed A[i,k].
+                        let bX4 := mload(ptrB) // Load packed B[j,k].
+
+                        c := add(c, mul(signextend(7, aX4), signextend(7, bX4)))
+                        c := add(c, mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4))))
+                        c := add(c, mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4))))
+                        c := add(c, mul(sar(192, aX4), sar(192, bX4)))
+                    }
+
+                    ptrA = ptrA + 32; // Advance to the next column → of `A` in strides of 4.
+                    ptrB = ptrB + 32; // Advance to the next column → of `B` in strides of 4.
+                }
+
+                // Parse the last remaining word.
+                if (ptrARest != 0) {
+                    assembly {
+                        // Mask applies to leftover bits in word.
+                        let mask := not(shr(mul(ptrARest, 8), not(0)))
+                        let aX4 := and(mload(ptrA), mask) // Load packed values from `A` at `ptrA`.
+                        let bX4 := and(mload(ptrB), mask) // Load packed values from `B` at `ptrB`.
+
+                        c := add(c, mul(signextend(7, shr(64, aX4)), signextend(7, shr(64, bX4))))
+                        c := add(c, mul(signextend(7, shr(128, aX4)), signextend(7, shr(128, bX4))))
+                        c := add(c, mul(sar(192, aX4), sar(192, bX4)))
+                    }
+                }
+
+                assembly {
+                    c := sar(32, c) // Normalize sum.
+                    c := add(c, signextend(7, mload(ptrBias))) // Add in bias term.
+
+                    overflow := or(overflow, add(c, INT64_SIGN)) // Keep track of overflow.
                 }
 
                 assembly {

@@ -279,6 +279,16 @@ contract TestN32x32Invariants is TestHelper {
     }
 
     /// @notice `a * b` should overflow for `a` in `(0, MAX)`, `b` in `(MAX/a, MAX]`.
+    function test_mul(N32x32 a, N32x32 b) public {
+        a = bound(a, ONE.add(N32x32.wrap(1)), MAX);
+        b = bound(b, MAX.divUp(a).add(N32x32.wrap(1)), MAX);
+
+        vm.expectRevert();
+
+        a.mul(b);
+    }
+
+    /// @notice `a * b` should overflow for `a` in `(0, MAX)`, `b` in `(MAX/a, MAX]`.
     function test_mul_revert_Overflow(N32x32 a, N32x32 b) public {
         a = bound(a, ONE.add(N32x32.wrap(1)), MAX);
         b = bound(b, MAX.divUp(a).add(N32x32.wrap(1)), MAX);
