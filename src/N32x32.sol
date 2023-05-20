@@ -218,6 +218,10 @@ library N32x32Lib {
         c = N32x32.wrap(-unwrap(a));
     }
 
+    function positive(N32x32 a) internal pure returns (N32x32 c) {
+        c = unwrap(a) > 0 ? a : ZERO;
+    }
+
     /* ------------- comparators ------------- */
 
     function eq(N32x32 a, N32x32 b) internal pure returns (bool c) {
