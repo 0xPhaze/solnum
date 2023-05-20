@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { N32x32, UINT64_MAX, ZERO, ONE } from "src/N32x32.sol";
-import { M32x32 } from "src/M32x32.sol";
+import { N32x32, N32x32Lib } from "src/N32x32.sol";
+import { M32x32, M32x32Lib } from "src/M32x32.sol";
 import { UM256 } from "src/UM256.sol";
 
 import "forge-std/Test.sol";
@@ -318,7 +318,7 @@ contract TestHelper is Test {
 
         for (uint256 i; i < n; ++i) {
             for (uint256 j; j < m; ++j) {
-                assertEq(A.at(i, j), (i == j) ? ONE : ZERO);
+                assertEq(A.at(i, j), (i == j) ? N32x32Lib.ONE : N32x32Lib.ZERO);
             }
         }
     }
@@ -416,7 +416,7 @@ contract TestHelper is Test {
         uint256 lenUp = ((len * 8 + 31) & ~uint256(31)) / 8;
 
         while (lenUp != len) {
-            A.setUnsafe(0, lenUp - 1, N32x32.wrap(int64(uint64(UINT64_MAX))));
+            A.setUnsafe(0, lenUp - 1, N32x32.wrap(int64(uint64(N32x32Lib.UINT64_MAX))));
 
             lenUp -= 1;
         }

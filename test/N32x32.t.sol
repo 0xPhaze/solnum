@@ -1,96 +1,109 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "src/N32x32.sol";
+import { N32x32, N32x32Lib } from "src/N32x32.sol";
+import { M32x32, M32x32Lib } from "src/M32x32.sol";
+// import "src/N32x32.sol";
 import "./utils/TestHelper.sol";
+
+// Constants.
+int256 constant INT32_MAX = 0x7fffffff;
+int256 constant INT64_SIGN = 0x8000000000000000;
+int256 constant INT64_MAX = 0x7fffffffffffffff;
+
+uint256 constant UINT32_MAX = 0xffffffff;
+uint256 constant UINT64_MAX = 0xffffffffffffffff;
+
+uint256 constant MASK_2X4 = 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff;
+uint256 constant INT64_SIGN_X4 = 0x8000000000000000800000000000000080000000000000008000000000000000;
 
 contract TestN32x32Invariants is TestHelper {
     function test_fromUint_toUint(uint256 ua) public {
-        if (ua > uint256(INT32_MAX)) {
-            vm.expectRevert(N32x32_Overflow.selector);
+        if (ua > uint256(N32x32Lib.INT32_MAX)) {
+            vm.expectRevert(N32x32Lib.Overflow.selector);
         }
 
-        assertEq(N32x32FromUint(ua).toUint(), ua);
+        assertEq(N32x32Lib.fromUint(ua).toUint(), ua);
     }
 
     function test_fromUint64_toUint64(uint64 ua) public {
-        if (ua > uint64(uint256(INT32_MAX))) {
-            vm.expectRevert(N32x32_Overflow.selector);
+        if (ua > uint64(uint256(N32x32Lib.INT32_MAX))) {
+            vm.expectRevert(N32x32Lib.Overflow.selector);
         }
 
-        assertEq(N32x32FromUint64(ua).toUint64(), ua);
+        assertEq(N32x32Lib.fromUint64(ua).toUint64(), ua);
     }
 
     function test_fromUint32_toUint32(uint32 ua) public {
-        if (ua > uint64(uint256(INT32_MAX))) {
-            vm.expectRevert(N32x32_Overflow.selector);
+        if (ua > uint64(uint256(N32x32Lib.INT32_MAX))) {
+            vm.expectRevert(N32x32Lib.Overflow.selector);
         }
 
-        assertEq(N32x32FromUint32(ua).toUint32(), ua);
+        assertEq(N32x32Lib.fromUint32(ua).toUint32(), ua);
     }
 
     function test_fromInt_toInt(int256 ua) public {
         if (ua < type(int32).min || ua > type(int32).max) {
-            vm.expectRevert(N32x32_Overflow.selector);
+            vm.expectRevert(N32x32Lib.Overflow.selector);
         }
 
-        assertEq(N32x32FromInt(ua).toInt(), ua);
+        assertEq(N32x32Lib.fromInt(ua).toInt(), ua);
     }
 
     function test_fromInt64_toInt64(int64 ua) public {
         if (ua < type(int32).min || ua > type(int32).max) {
-            vm.expectRevert(N32x32_Overflow.selector);
+            vm.expectRevert(N32x32Lib.Overflow.selector);
         }
 
-        assertEq(N32x32FromInt64(ua).toInt64(), ua);
+        assertEq(N32x32Lib.fromInt64(ua).toInt64(), ua);
     }
 
     function test_fromInt32_toInt32(int32 ua) public {
         if (ua < type(int32).min || ua > type(int32).max) {
-            vm.expectRevert(N32x32_Overflow.selector);
+            vm.expectRevert(N32x32Lib.Overflow.selector);
         }
 
-        assertEq(N32x32FromInt32(ua).toInt32(), ua);
+        assertEq(N32x32Lib.fromInt32(ua).toInt32(), ua);
     }
 
     /* ------------- add ------------- */
 
     /// @notice `a + 0 = a` should hold.
     function test_add(N32x32 a) public {
-        assertEq(a.add(ZERO), a);
+        assertEq(a.add(N32x32Lib.ZERO), a);
     }
 
     /// @notice `MAX/2 + MAX/2` should overflow.
     function test_add_revert_Overflow() public {
-        vm.expectRevert(N32x32_Overflow.selector);
+        vm.expectRevert(N32x32Lib.Overflow.selector);
 
-        HALF_MAX.add(HALF_MAX).add(N32x32.wrap(2));
+        N32x32Lib.HALF_MAX.add(N32x32Lib.HALF_MAX).add(N32x32.wrap(2));
     }
 
     /// @notice `(a + b) + 1` should overflow for `a` in `(0, MAX]`, `b` in `[MAX-a, MAX]`.
     function test_add_revert_Overflow(N32x32 a, N32x32 b) public {
-        a = bound(a, ZERO, MAX);
-        b = bound(b, MAX.sub(a), MAX);
+        a = bound(a, N32x32Lib.ZERO, N32x32Lib.MAX);
+        b = bound(b, N32x32Lib.MAX.sub(a), N32x32Lib.MAX);
 
-        vm.expectRevert(N32x32_Overflow.selector);
+        vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.add(b).add(N32x32.wrap(1));
     }
 
     /// @notice `(a + b) - 1` should underflow for `a` in `[MIN, 0]`, `b` in `[MIN, MIN-a]`.
     function test_add_revert_Underflow(N32x32 a, N32x32 b) public {
-        a = bound(a, MIN, ZERO);
-        b = bound(b, MIN, MIN.sub(a));
+        a = bound(a, N32x32Lib.MIN, N32x32Lib.ZERO);
+        b = bound(b, N32x32Lib.MIN, N32x32Lib.MIN.sub(a));
 
-        vm.expectRevert(N32x32_Overflow.selector);
+        vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.add(b).add(N32x32.wrap(-1));
     }
 
     /// @notice `a + b = b + a` should hold for `a`, `b` in `[MIN/2, MAX/2]`.
     function test_add_commutative(N32x32 a, N32x32 b) public {
-        a = bound(a, HALF_MIN, HALF_MAX);
-        b = bound(b, HALF_MIN, HALF_MAX);
+        a = bound(a, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
+        b = bound(b, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
 
         assertEq(a.add(b), b.add(a));
     }
@@ -109,44 +122,44 @@ contract TestN32x32Invariants is TestHelper {
 
     /// @notice `a + b = a - (-b)` should hold for `a`, `b` in `[MIN/2, MAX/2]`.
     function test_sub(N32x32 a, N32x32 b) public {
-        a = bound(a, HALF_MIN, HALF_MAX);
-        b = bound(b, HALF_MIN, HALF_MAX);
+        a = bound(a, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
+        b = bound(b, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
 
-        assertEq(a.add(b), a.sub(ZERO.sub(b)));
+        assertEq(a.add(b), a.sub(N32x32Lib.ZERO.sub(b)));
     }
 
     /// @notice `a + b = a - (-b)` should hold or revert.
     function test_sub_r(N32x32 a, N32x32 b) public canRevert {
-        assertEq(a.add(b), a.sub(ZERO.sub(b)));
+        assertEq(a.add(b), a.sub(N32x32Lib.ZERO.sub(b)));
     }
 
     /// @notice `a - b = -(b - a)` should hold for `a`, `b` in `[MIN/2, MAX/2]`.
     function test_sub_property(N32x32 a, N32x32 b) public {
-        a = bound(a, HALF_MIN, HALF_MAX);
-        b = bound(b, HALF_MIN, HALF_MAX);
+        a = bound(a, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
+        b = bound(b, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
 
-        assertEq(a.sub(b), ZERO.sub(b.sub(a)));
+        assertEq(a.sub(b), N32x32Lib.ZERO.sub(b.sub(a)));
     }
 
     /// @notice `a - b = -(b - a)` should hold or revert.
     function test_sub_property_r(N32x32 a, N32x32 b) public canRevert {
-        assertEq(a.sub(b), ZERO.sub(b.sub(a)));
+        assertEq(a.sub(b), N32x32Lib.ZERO.sub(b.sub(a)));
     }
 
     /// @notice `a - b` should overflow for `a` in `[0, MAX]`, `b` in `[MIN, MIN+a]`.
     function test_sub_revert_Overflow(N32x32 a, N32x32 b) public {
-        a = bound(a, ZERO, MAX);
-        b = bound(b, MIN, MIN.add(a));
+        a = bound(a, N32x32Lib.ZERO, N32x32Lib.MAX);
+        b = bound(b, N32x32Lib.MIN, N32x32Lib.MIN.add(a));
 
-        vm.expectRevert(N32x32_Overflow.selector);
+        vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.sub(b);
     }
 
     /// @notice `(a - b) - 1` should underflow for `a` in `[MIN, MIN/2]`, `b` in `(MIN/2, MAX]`.
     function test_sub_revert_Underflow(N32x32 a, N32x32 b) public {
-        a = bound(a, MIN, HALF_MIN);
-        b = bound(b, HALF_MIN.neg(), MAX);
+        a = bound(a, N32x32Lib.MIN, N32x32Lib.HALF_MIN);
+        b = bound(b, N32x32Lib.HALF_MIN.neg(), N32x32Lib.MAX);
 
         vm.expectRevert();
 
@@ -157,8 +170,8 @@ contract TestN32x32Invariants is TestHelper {
 
     /// @notice `(a + b) - b = a` should hold for `a`, `b` in `[MIN/2, MAX/2]`.
     function test_add_sub(N32x32 a, N32x32 b) public {
-        a = bound(a, HALF_MIN, HALF_MAX);
-        b = bound(b, HALF_MIN, HALF_MAX);
+        a = bound(a, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
+        b = bound(b, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
 
         assertEq(a.add(b).sub(b), a);
         assertEq(a.sub(b).add(b), a);
@@ -180,44 +193,44 @@ contract TestN32x32Invariants is TestHelper {
     function test_neg_revert_Overflow() public {
         vm.expectRevert();
 
-        MIN.neg();
+        N32x32Lib.MIN.neg();
     }
 
     /// @notice `-a = 0 - a` should hold for `a` in `(MIN, MAX]`.
     function test_neg(N32x32 a) public {
-        a = bound(a, MAX.neg(), MAX);
+        a = bound(a, N32x32Lib.MAX.neg(), N32x32Lib.MAX);
 
-        assertEq(a.neg(), ZERO.sub(a));
+        assertEq(a.neg(), N32x32Lib.ZERO.sub(a));
     }
 
     /* ------------- sign ------------- */
 
     /// @notice `sign(a) = 1` should hold for `a` in `[0, MAX]`.
     function test_sign(N32x32 a) public {
-        a = bound(a, ZERO, MAX);
+        a = bound(a, N32x32Lib.ZERO, N32x32Lib.MAX);
 
-        assertEq(a.sign(), ONE);
+        assertEq(a.sign(), N32x32Lib.ONE);
     }
 
     /// @notice `sign(a) = -1` should hold for `a` in `[MIN, 0)`.
     function test_sign_neg(N32x32 a) public {
-        a = bound(a, MIN, -1);
+        a = bound(a, N32x32Lib.MIN, -1);
 
-        assertEq(a.sign(), NEG_ONE);
+        assertEq(a.sign(), N32x32Lib.NEG_ONE);
     }
 
     /* ------------- abs ------------- */
 
     /// @notice `|a| = a` should hold for `a` in `[0, MAX]`.
     function test_abs(N32x32 a) public {
-        a = bound(a, ZERO, MAX);
+        a = bound(a, N32x32Lib.ZERO, N32x32Lib.MAX);
 
         assertEq(a.abs(), a);
     }
 
     /// @notice `|a| = -a` should hold for `a` in `(MIN, 0]`.
     function test_abs_neg(N32x32 a) public {
-        a = bound(a, MAX.neg(), ZERO);
+        a = bound(a, N32x32Lib.MAX.neg(), N32x32Lib.ZERO);
 
         assertEq(a.abs(), a.neg());
     }
@@ -226,33 +239,33 @@ contract TestN32x32Invariants is TestHelper {
     function test_abs_revert_Overflow() public {
         vm.expectRevert();
 
-        MIN.abs();
+        N32x32Lib.MIN.abs();
     }
 
     /* ------------- mul ------------- */
 
     /// @notice `a * 1 = a` should hold.
     function test_mul_by_one(N32x32 a) public {
-        assertEq(a.mul(ONE), a);
+        assertEq(a.mul(N32x32Lib.ONE), a);
     }
 
     /// @notice `a * 0 = 0` should hold.
     function test_mul_by_zero(N32x32 a) public {
-        assertEq(a.mul(ZERO), ZERO);
+        assertEq(a.mul(N32x32Lib.ZERO), N32x32Lib.ZERO);
     }
 
     /// @notice `a * 2 = a + a` should hold for `a` in `[MIN/2, MAX/2]`..
     function test_mul_by_two(N32x32 a) public {
-        a = bound(a, HALF_MIN, HALF_MAX);
+        a = bound(a, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
 
-        assertEq(a.mul(TWO), a.add(a));
+        assertEq(a.mul(N32x32Lib.TWO), a.add(a));
     }
 
     /// @notice `a * (-1) = -a` should hold for `a` in `(MIN, MAX]`.
     function test_mul_by_neg_one(N32x32 a) public {
-        a = bound(a, MAX.neg(), MAX);
+        a = bound(a, N32x32Lib.MAX.neg(), N32x32Lib.MAX);
 
-        assertEq(a.mul(NEG_ONE), a.neg());
+        assertEq(a.mul(N32x32Lib.NEG_ONE), a.neg());
     }
 
     /// @notice `a * b = b * a` should hold or revert.
@@ -263,9 +276,9 @@ contract TestN32x32Invariants is TestHelper {
     /// @notice `(a * b) * c = a * (b * c)` should hold or revert.
     function test_mul_associative(N32x32 a, N32x32 b, N32x32 c) public canRevert {
         // Bounding to third root of MAX to prevent overflow rejects.
-        a = bound(a, ONE, N32x32.wrap(1290 << 32));
-        b = bound(b, ONE, N32x32.wrap(1290 << 32));
-        c = bound(c, ONE, N32x32.wrap(1290 << 32));
+        a = bound(a, N32x32Lib.ONE, N32x32.wrap(1290 << 32));
+        b = bound(b, N32x32Lib.ONE, N32x32.wrap(1290 << 32));
+        c = bound(c, N32x32Lib.ONE, N32x32.wrap(1290 << 32));
 
         // Approximate due to rounding errors.
         // todo: investigate.
@@ -280,8 +293,8 @@ contract TestN32x32Invariants is TestHelper {
 
     /// @notice `a * b` should overflow for `a` in `(0, MAX)`, `b` in `(MAX/a, MAX]`.
     function test_mul(N32x32 a, N32x32 b) public {
-        a = bound(a, ONE.add(N32x32.wrap(1)), MAX);
-        b = bound(b, MAX.divUp(a).add(N32x32.wrap(1)), MAX);
+        a = bound(a, N32x32Lib.ONE.add(N32x32.wrap(1)), N32x32Lib.MAX);
+        b = bound(b, N32x32Lib.MAX.divUp(a).add(N32x32.wrap(1)), N32x32Lib.MAX);
 
         vm.expectRevert();
 
@@ -290,8 +303,8 @@ contract TestN32x32Invariants is TestHelper {
 
     /// @notice `a * b` should overflow for `a` in `(0, MAX)`, `b` in `(MAX/a, MAX]`.
     function test_mul_revert_Overflow(N32x32 a, N32x32 b) public {
-        a = bound(a, ONE.add(N32x32.wrap(1)), MAX);
-        b = bound(b, MAX.divUp(a).add(N32x32.wrap(1)), MAX);
+        a = bound(a, N32x32Lib.ONE.add(N32x32.wrap(1)), N32x32Lib.MAX);
+        b = bound(b, N32x32Lib.MAX.divUp(a).add(N32x32.wrap(1)), N32x32Lib.MAX);
 
         vm.expectRevert();
 
@@ -302,41 +315,41 @@ contract TestN32x32Invariants is TestHelper {
 
     /// @notice `a / 1 = a` should hold.
     function test_div_by_one(N32x32 a) public {
-        assertEq(a.div(ONE), a);
+        assertEq(a.div(N32x32Lib.ONE), a);
     }
 
     /// @notice `a / 0` should revert.
     function test_div_by_zero(N32x32 a) public {
         vm.expectRevert();
 
-        a.div(ZERO);
+        a.div(N32x32Lib.ZERO);
     }
 
     /// @notice `(a * 2) / 2 = a` should hold for `a` in `[MIN/2, MAX/2]`.
     function test_div_by_two(N32x32 a) public {
-        a = bound(a, HALF_MIN, HALF_MAX);
+        a = bound(a, N32x32Lib.HALF_MIN, N32x32Lib.HALF_MAX);
 
-        assertEq(a.mul(TWO).div(TWO), a);
+        assertEq(a.mul(N32x32Lib.TWO).div(N32x32Lib.TWO), a);
     }
 
     /// @notice `a / (-1) = -a` should hold for `a` in `(MIN, MAX]`.
     function test_div_by_neg_one(N32x32 a) public {
-        a = bound(a, MAX.neg(), MAX);
+        a = bound(a, N32x32Lib.MAX.neg(), N32x32Lib.MAX);
 
-        assertEq(a.div(NEG_ONE), a.neg());
+        assertEq(a.div(N32x32Lib.NEG_ONE), a.neg());
     }
 
     /// @notice `(a * b) / b = a` should approx. hold or revert.
     function test_mul_div(N32x32 a, N32x32 b) public canRevert {
-        assertApproxEqAbs(a.mul(b).div(b), a, ONE);
-        assertApproxEqAbs(a.div(b).mul(b), a, ONE);
+        assertApproxEqAbs(a.mul(b).div(b), a, N32x32Lib.ONE);
+        assertApproxEqAbs(a.div(b).mul(b), a, N32x32Lib.ONE);
     }
 
     /// @notice `(a * b) / b = a` should approx. hold or revert for
     ///         `|a|` in `[ONE, MAX]`, `|a*b|` in `[|a|, MAX]`
     function test_mul_div_precision(N32x32 a, N32x32 b) public canRevert {
-        a = bound(a.abs(), ONE, MAX).mul(a.sign());
-        b = bound(b.abs(), ONE, MAX.div(a.abs())).mul(b.sign());
+        a = bound(a.abs(), N32x32Lib.ONE, N32x32Lib.MAX).mul(a.sign());
+        b = bound(b.abs(), N32x32Lib.ONE, N32x32Lib.MAX.div(a.abs())).mul(b.sign());
 
         assertApproxEqAbs(a.mul(b).div(b), a, 1);
     }
@@ -344,8 +357,8 @@ contract TestN32x32Invariants is TestHelper {
     /// @notice `(a / b) * b = a` should approx. hold or revert for
     ///         `|a|` in `[0, ONE]`, `|b|` in `[|a/MAX|, ONE]`
     function test_div_mul_precision(N32x32 a, N32x32 b) public canRevert {
-        a = bound(a.abs(), ZERO, ONE).mul(a.sign());
-        b = bound(b.abs(), a.abs().div(MAX), ONE).mul(b.sign());
+        a = bound(a.abs(), N32x32Lib.ZERO, N32x32Lib.ONE).mul(a.sign());
+        b = bound(b.abs(), a.abs().div(N32x32Lib.MAX), N32x32Lib.ONE).mul(b.sign());
 
         assertApproxEqAbs(a.div(b).mul(b), a, 1);
     }
@@ -366,7 +379,7 @@ contract TestN32x32Invariants is TestHelper {
     function test_tryAdd(N32x32 a, N32x32 b) public {
         (bool success,) = a.tryAdd(b);
 
-        if (!success) vm.expectRevert(N32x32_Overflow.selector);
+        if (!success) vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.add(b);
     }
@@ -374,7 +387,7 @@ contract TestN32x32Invariants is TestHelper {
     function test_trySub(N32x32 a, N32x32 b) public {
         (bool success,) = a.trySub(b);
 
-        if (!success) vm.expectRevert(N32x32_Overflow.selector);
+        if (!success) vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.sub(b);
     }
@@ -382,17 +395,17 @@ contract TestN32x32Invariants is TestHelper {
     function test_tryMul(N32x32 a, N32x32 b) public {
         (bool success,) = a.tryMul(b);
 
-        if (!success) vm.expectRevert(N32x32_Overflow.selector);
+        if (!success) vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.mul(b);
     }
 
     function test_tryDiv(N32x32 a, N32x32 b) public {
-        b = bound(b, 1, MAX);
+        b = bound(b, 1, N32x32Lib.MAX);
 
         (bool success,) = a.tryDiv(b);
 
-        if (!success) vm.expectRevert(N32x32_Overflow.selector);
+        if (!success) vm.expectRevert(N32x32Lib.Overflow.selector);
 
         a.div(b);
     }
@@ -495,7 +508,7 @@ contract TestN32x32Differential is TestHelper {
             // uint256 overflow = ((~(aX4 ^ bX4)) & (aX4 ^ cX4)) & INT64_SIGN_X4;
             overflow = ((~(aX4 ^ bX4)) & (aX4 ^ cX4)) & INT64_SIGN_X4 != 0;
 
-            // if (overflow != 0) revert N32x32_Overflow();
+            // if (overflow != 0) revert N32x32Lib.Overflow();
         }
     }
 
@@ -528,7 +541,7 @@ contract TestN32x32Differential is TestHelper {
         unchecked {
             int256 uc = int256(a) * b;
 
-            if (uint256(uc) + uint256(int256(INT64_SIGN)) > UINT64_MAX) revert N32x32_Overflow();
+            if (uint256(uc) + uint256(int256(INT64_SIGN)) > UINT64_MAX) revert N32x32Lib.Overflow();
 
             c = int64(uc);
         }
@@ -578,7 +591,7 @@ contract TestN32x32Differential is TestHelper {
                 // overflow := gt(uc, INT64_MAX)
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
 
             c = int64(uc);
         }
@@ -621,7 +634,7 @@ contract TestN32x32Differential is TestHelper {
     //         overflow = ((a >> 63) ^ (b >> 63) ^ (uc >> 63)) & 1 == 1;
 
     //         console.log("overflow", overflow ? "1" : "0");
-    //         if (overflow) revert N32x32_Overflow();
+    //         if (overflow) revert N32x32Lib.Overflow();
 
     //         c = int64(uc);
     //     }
@@ -657,7 +670,7 @@ contract TestN32x32Differential is TestHelper {
                 // overflow := gt(sub(shl(128, uc), shl(128, uMIN)), shl(128, UINT64_MAX))
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
 
             c = int64(uc);
             //
@@ -674,7 +687,7 @@ contract TestN32x32Differential is TestHelper {
     //     unchecked {
     //         int256 uc = int256(a) * b >> 32;
 
-    //         if (uint256(uc) + uint256(int256(INT64_SIGN)) > UINT64_MAX) revert N32x32_Overflow();
+    //         if (uint256(uc) + uint256(int256(INT64_SIGN)) > UINT64_MAX) revert N32x32Lib.Overflow();
 
     //         c = int64(uc);
     //     }
@@ -691,7 +704,7 @@ contract TestN32x32Differential is TestHelper {
     //             overflow := gt(sub(uc, uMIN), UINT64_MAX)
     //         }
 
-    //         if (overflow) revert N32x32_Overflow();
+    //         if (overflow) revert N32x32Lib.Overflow();
 
     //         c = int64(uc);
     //     }
@@ -738,7 +751,7 @@ contract TestN32x32Differential is TestHelper {
                 overflow := gt(carry, UINT64_MAX)
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
         }
     }
 
@@ -785,7 +798,7 @@ contract TestN32x32Differential is TestHelper {
                 cX4 := or(cX4, and(mul(and(aX4, not(MASK_2X4)), and(s, UINT64_MAX)), not(MASK_2X4)))
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
         }
     }
 
@@ -835,7 +848,7 @@ contract TestN32x32Differential is TestHelper {
             // cX4 := or(cX4, and(shr(32, mul(and(aX4, not(MASK_2X4)), and(s, UINT64_MAX))), not(MASK_2X4)))
         }
 
-        if (overflow) revert N32x32_Overflow();
+        if (overflow) revert N32x32Lib.Overflow();
     }
 
     // If the product of two positive numbers exceeds max int, overflow
@@ -871,7 +884,7 @@ contract TestN32x32Differential is TestHelper {
     //         // overflow := and(and(not(xor(aX4, bX4)), xor(aX4, cX4)), INT64_SIGN_X4)
     //     }
 
-    //     if (overflow) revert N32x32_Overflow();
+    //     if (overflow) revert N32x32Lib.Overflow();
     // }
     // cX4 := and(add(and(aX4, MASK_2X4), and(bX4, MASK_2X4)), MASK_2X4)
     // cX4 := or(cX4, and(add(and(aX4, not(MASK_2X4)), and(bX4, not(MASK_2X4))), not(MASK_2X4)))
@@ -1011,7 +1024,7 @@ contract TestN32x32Differential is TestHelper {
                 overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
         }
     }
 
@@ -1054,7 +1067,7 @@ contract TestN32x32Differential is TestHelper {
                 overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
         }
     }
 
@@ -1082,7 +1095,7 @@ contract TestN32x32Differential is TestHelper {
                 overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
         }
     }
 
@@ -1110,7 +1123,7 @@ contract TestN32x32Differential is TestHelper {
                 overflow := gt(add(sum, INT64_SIGN), UINT64_MAX)
             }
 
-            if (overflow) revert N32x32_Overflow();
+            if (overflow) revert N32x32Lib.Overflow();
         }
     }
 
