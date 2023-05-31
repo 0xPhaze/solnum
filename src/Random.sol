@@ -360,6 +360,141 @@ library RandomLib {
         }
     }
 
+    function addRandnToWithDecay_(Random r, M32x32 A, N32x32 scale, N32x32 decay, M32x32 C) internal pure {
+        unchecked {
+            // if (n != nB || m != mB) revert("M32x32_InvalidDimensions");
+            uint256 ptrA = A.ref();
+            // uint256 size = A.sizeBytes(); // Thx stack-too-deep.
+
+            // Loop over all `n * m` elements of 8 bytes.
+            uint256 end = ptrA + ((A.sizeBytes() + 31) & ~uint256(31));
+            // Obtain a reference to `C`.
+            uint256 ptrC = C.ref();
+            // Keep track of overflow.
+            uint256 carry;
+
+            // Pre-compute multiplier.
+            uint256 multiplier;
+            assembly {
+                multiplier := mul(scale, 42081913348) // Multiply scale by `sqrt(N / variance) = sqrt(8 * 12) << 32`.
+            }
+
+            while (ptrA != end) {
+                assembly {
+                    let rn, rX4
+                    let a
+
+                    let aX4 := mload(ptrA)
+                    let randomSeed // Update random seed when iterating over elements.
+
+                    randomSeed := keccak256(r, 32) // Generate a new random number.
+                    mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                    // Sample a random normal variable.
+                    rn := and(randomSeed, UINT32_MAX_X4) // Add masked halves together.
+                    rn := add(rn, shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                    rn := mul(rn, ONES_X4) // Multiply by `1 + (1 << 64) + (1 << 128) + (1 << 192)`.
+                    rn := shr(192, rn) // The sum is located at bit pos 192.
+                    rn := sub(rn, 0x400000000) // Center (subtract N times mean = `8 * 0x80000000`).
+                    rn := mul(rn, multiplier) // Multiply by `scale * sqrt(N / variance) = scale * sqrt(8 * 12) << 32`.
+                    rn := sar(67, rn) // Shift back by 64 bits. Take average: Divide by `N = 8`.
+
+                    // TODO: overflow
+                    a := sar(32, mul(signextend(7, aX4), decay)) // Multiply `a` with `decay` term.
+                    a := add(a, rn) // Add `a` and random number.
+
+                    rX4 := and(a, UINT64_MAX) // Pack number.
+                    carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
+
+                    randomSeed := keccak256(r, 32) // Generate a new random number.
+                    mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                    // Sample a random normal variable.
+                    rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                    rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
+
+                    a := sar(32, mul(signextend(7, shr(64, aX4)), decay)) // Multiply `a` with `decay` term.
+                    a := add(a, rn) // Add `a` and random number.
+                    rX4 := or(rX4, shl(64, and(a, UINT64_MAX))) // Pack number.
+                    carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
+
+                    randomSeed := keccak256(r, 32) // Generate a new random number.
+                    mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                    // Sample a random normal variable.
+                    rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                    rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
+
+                    a := sar(32, mul(signextend(7, shr(128, aX4)), decay)) // Multiply `a` with `decay` term.
+                    a := add(a, rn) // Add `a` and random number.
+                    rX4 := or(rX4, shl(128, and(a, UINT64_MAX))) // Pack number.
+                    carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
+
+                    randomSeed := keccak256(r, 32) // Generate a new random number.
+                    mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                    // Sample a random normal variable.
+                    rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                    rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
+
+                    a := sar(32, mul(sar(192, aX4), decay)) // Multiply `a` with `decay` term.
+                    a := add(a, rn) // Add `a` and random number.
+                    rX4 := or(rX4, shl(192, and(a, UINT64_MAX))) // Pack number.
+                    carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
+
+                    randomSeed := keccak256(r, 32) // Generate a new random number.
+                    mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                    mstore(ptrC, rX4) // Store packed variable at `ptrC`.
+                }
+
+                ptrA = ptrA + 32;
+                ptrC = ptrC + 32;
+            }
+
+            // The rest needs to be parsed individually.
+            uint256 rest = A.sizeBytes() & 31;
+
+            // TODO: Adapt overflow for non-multiples of 4.
+            if (rest != 0) {
+                uint256 aX4;
+                uint256 rX4;
+
+                assembly {
+                    aX4 := mload(ptrA) // Load packed elements at `ptrA`.
+                }
+
+                // Parse the last remaining word in chunks of 8 bytes.
+                while (true) {
+                    assembly {
+                        let randomSeed := keccak256(r, 32) // Generate a new random number.
+                        mstore(r, randomSeed) // Store the updated random seed in `r`.
+
+                        // Sample a random normal variable.
+                        let rn := add(and(randomSeed, UINT32_MAX_X4), shr(32, and(randomSeed, not(UINT32_MAX_X4))))
+                        rn := sar(67, mul(sub(shr(192, mul(rn, ONES_X4)), 0x400000000), multiplier))
+
+                        let shift := mul(sub(32, rest), 8) // Compute the shift.
+                        let a := sar(32, mul(signextend(7, shr(shift, aX4)), decay)) // Multiply `a` with `decay` term.
+                        a := add(a, rn) // Add `a` and random number.
+                        rX4 := or(rX4, shl(shift, and(a, UINT64_MAX))) // Pack number.
+                        carry := or(carry, add(a, INT64_SIGN)) // Keep track of overflow.
+                    }
+
+                    if (rest == 8) break;
+
+                    rest = rest - 8;
+                }
+
+                assembly {
+                    mstore(ptrC, rX4) // Store packed variable at `ptrC`.
+                }
+            }
+
+            if (carry > N32x32Lib.UINT64_MAX) revert N32x32Lib.Overflow();
+        }
+    }
+
     // function randn2(Random r, uint256 n, uint256 m) internal pure returns (M32x32 A) {
     //     unchecked {
     //         // Allocate memory for matrix.

@@ -2016,11 +2016,10 @@ library M32x32Lib {
                     rest = rest - 8;
                 }
             }
-        
+
             assembly {
                 s := shl(32, s)
             }
-
         }
     }
 
