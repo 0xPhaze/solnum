@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { N32x32, N32x32Lib } from "src/N32x32.sol";
-import { M32x32, M32x32Lib } from "src/M32x32.sol";
-import { UM256 } from "src/UM256.sol";
+import { N32x32, N32x32Lib } from "../N32x32.sol";
+import { M32x32, M32x32Lib } from "../M32x32.sol";
+import { UM256 } from "../UM256.sol";
 
 import "forge-std/Test.sol";
 
@@ -17,7 +17,7 @@ interface VmMemSafe is Vm {
     function expectSafeMemoryCall(uint64 _min, uint64 _max) external;
 }
 
-contract TestHelper is Test {
+contract SolnumTestHelper is Test {
     VmMemSafe vm2 = VmMemSafe(address(vm));
 
     bool log_mat_extended = false;

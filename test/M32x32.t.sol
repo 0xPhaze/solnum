@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { N32x32, N32x32Lib } from "src/N32x32.sol";
-import { M32x32, M32x32Lib } from "src/M32x32.sol";
-import { Random, RandomLib } from "src/Random.sol";
-import "./utils/TestHelper.sol";
+import { N32x32, N32x32Lib } from "../src/N32x32.sol";
+import { M32x32, M32x32Lib } from "../src/M32x32.sol";
+import { Random, RandomLib } from "../src/Random.sol";
+import "../src/utils/SolnumTestHelper.sol";
 
-contract TestM32x32 is TestHelper {
+contract TestM32x32 is SolnumTestHelper {
     uint8[3][4] MATRIX_43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
 
     /* ------------- header ------------- */
@@ -1092,7 +1092,7 @@ contract TestM32x32 is TestHelper {
 //     }
 // }
 
-// contract TestMemSafe is TestHelper {
+// contract TestMemSafe is SolnumTestHelper {
 //     function test_magicValueTest(uint256 n) public {
 //         n = bound(n, 1, 10);
 

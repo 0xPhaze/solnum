@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "src/UM256.sol";
-import "./utils/TestHelper.sol";
+import "../src/utils/SolnumTestHelper.sol";
 
-contract TestUM256 is TestHelper {
+contract TestUM256 is SolnumTestHelper {
     uint8[3][4] MATRIX_43 = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
 
     /* ------------- malloc ------------- */
@@ -628,7 +628,7 @@ contract TestGasUM256 {
     }
 }
 
-// contract TestMemSafe is TestHelper {
+// contract TestMemSafe is SolnumTestHelper {
 //     /* ------------- memory safety ------------- */
 
 //     modifier testMemorySafe(UM256 A) {

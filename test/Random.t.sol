@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { M32x32, M32x32Lib } from "src/M32x32.sol";
+import { M32x32, M32x32Lib } from "../src/M32x32.sol";
 // import "src/M32x32.sol" as sn;
 // import "src/M32x32.sol";
-// import { N32x32, N32x32Lib.ZERO, N32x32Lib.ONE, N32x32Lib.HALF } from "src/N32x32.sol";
-// import { Random, RandomLib.seed } from "src/Random.sol";
-import { N32x32, N32x32Lib } from "src/N32x32.sol";
-import { Random, RandomLib } from "src/Random.sol";
-import { TestHelper, console } from "./utils/TestHelper.sol";
+// import { N32x32, N32x32Lib.ZERO, N32x32Lib.ONE, N32x32Lib.HALF } from "../src/N32x32.sol";
+// import { Random, RandomLib.seed } from "../src/Random.sol";
+import { N32x32, N32x32Lib } from "../src/N32x32.sol";
+import { Random, RandomLib } from "../src/Random.sol";
+import { SolnumTestHelper, console } from "../src/utils/SolnumTestHelper.sol";
 
-contract TestRandom is TestHelper {
+contract TestRandom is SolnumTestHelper {
     /* ------------- constructors ------------- */
 
     function test_rand(uint256 n, uint256 m, uint256 s) public {
@@ -114,13 +114,11 @@ contract TestRandom is TestHelper {
         // logMat('Y', Y);
 
         for (uint256 i; i < 1000; i++) {
-            
             r.addRandnTo_(A[0], g, A_[0]);
             r.addRandnTo_(b[0], g, b_[0]);
 
             r.addRandnTo_(A[1], g, A_[1]);
             r.addRandnTo_(b[1], g, b_[1]);
-            
 
             Z = X.linearReluTransposed(A_[0], b_[0]);
             Z = Z.linearTransposed(A_[1], b_[1]);
@@ -140,7 +138,7 @@ contract TestRandom is TestHelper {
             // // S = (y == Output).sum()
 
             if (score.gt(bestScore)) {
-                logNum('score', score);
+                logNum("score", score);
                 bestScore = score;
 
                 (A[0], A_[0]) = (A_[0], A[0]);

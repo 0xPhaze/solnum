@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { N32x32, N32x32Lib } from "src/N32x32.sol";
-import { M32x32, M32x32Lib } from "src/M32x32.sol";
+import { N32x32, N32x32Lib } from "../src/N32x32.sol";
+import { M32x32, M32x32Lib } from "../src/M32x32.sol";
 // import "src/N32x32.sol";
-import "./utils/TestHelper.sol";
+import "../src/utils/SolnumTestHelper.sol";
 
 // Constants.
 int256 constant INT32_MAX = 0x7fffffff;
@@ -17,7 +17,7 @@ uint256 constant UINT64_MAX = 0xffffffffffffffff;
 uint256 constant MASK_2X4 = 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff;
 uint256 constant INT64_SIGN_X4 = 0x8000000000000000800000000000000080000000000000008000000000000000;
 
-contract TestN32x32Invariants is TestHelper {
+contract TestN32x32Invariants is SolnumTestHelper {
     function test_fromUint_toUint(uint256 ua) public {
         if (ua > uint256(N32x32Lib.INT32_MAX)) {
             vm.expectRevert(N32x32Lib.Overflow.selector);
@@ -411,7 +411,7 @@ contract TestN32x32Invariants is TestHelper {
     }
 }
 
-contract TestGasN32x32 is TestHelper {
+contract TestGasN32x32 is SolnumTestHelper {
     function test_perf_add(N32x32 a, N32x32 b) public canRevert {
         a.add(b);
     }
@@ -429,7 +429,7 @@ contract TestGasN32x32 is TestHelper {
     }
 }
 
-contract TestN32x32Differential is TestHelper {
+contract TestN32x32Differential is SolnumTestHelper {
     /* ------------- add ------------- */
 
     function test_add_packed(int64 a1, int64 a2, int64 a3, int64 a4, int64 b1, int64 b2, int64 b3, int64 b4) public {
@@ -1140,7 +1140,7 @@ contract TestN32x32Differential is TestHelper {
     }
 }
 
-contract TestGas is TestHelper {
+contract TestGas is SolnumTestHelper {
     // function test_perf_packedAdd(uint256 aX4, uint256 bX4) public pure returns (uint256 a) {
     //     for (uint256 i; i < 100; i++) {
     //         a = packedAdd(aX4, bX4);
